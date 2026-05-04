@@ -10,3 +10,4 @@ python-dotenv
 PyPDF2
 httpx
 email-validator
+python-multipart
