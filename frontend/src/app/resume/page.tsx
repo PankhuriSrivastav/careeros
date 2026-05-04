@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 import { Upload, FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
@@ -10,13 +10,17 @@ export default function ResumePage() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
-  // Check authentication
-  if (!apiService.isAuthenticated()) {
-    router.push('/login');
-    return null;
-  }
+  useEffect(() => {
+    // Check authentication only on the client side
+    if (!apiService.isAuthenticated()) {
+      router.push('/login');
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, [router]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -45,6 +49,15 @@ export default function ResumePage() {
     }
   };
 
+  // Show loading while checking authentication
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
@@ -59,7 +72,6 @@ export default function ResumePage() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <h2 className="text-xl font-bold mb-4">Upload Your Resume (PDF)</h2>
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
             <input
               type="file"
@@ -68,10 +80,7 @@ export default function ResumePage() {
               className="hidden"
               id="resume-upload"
             />
-            <label
-              htmlFor="resume-upload"
-              className="cursor-pointer inline-flex flex-col items-center"
-            >
+            <label htmlFor="resume-upload" className="cursor-pointer inline-flex flex-col items-center">
               <Upload className="w-12 h-12 text-gray-400 mb-2" />
               <span className="text-gray-600">
                 {file ? file.name : 'Click to select a PDF file'}
@@ -109,18 +118,14 @@ export default function ResumePage() {
         {result && (
           <div className="bg-white rounded-xl shadow-lg p-6">
             <h2 className="text-xl font-bold mb-4">Analysis Results</h2>
-
-            {/* Score */}
+            
             <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-600">ATS Compatibility Score</span>
                 <span className="text-2xl font-bold text-blue-600">{result.score}/100</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${result.score}%` }}
-                />
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${result.score}%` }} />
               </div>
               <p className="text-sm text-gray-500 mt-2">
                 {result.score >= 80
@@ -131,7 +136,6 @@ export default function ResumePage() {
               </p>
             </div>
 
-            {/* Keywords */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
                 <CheckCircle className="w-5 h-5 text-green-500" />
@@ -139,42 +143,28 @@ export default function ResumePage() {
               </h3>
               <div className="flex flex-wrap gap-2">
                 {result.keywords.map((kw: string, idx: number) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                  >
-                    {kw}
-                  </span>
+                  <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">{kw}</span>
                 ))}
               </div>
             </div>
 
-            {/* Missing Skills */}
-            <div className="mb-6">
-              <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-orange-500" />
-                Missing Important Skills
-              </h3>
-              {result.missing.length === 0 ? (
-                <p className="text-green-600">Great! No major skills missing.</p>
-              ) : (
+            {result.missing && result.missing.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-orange-500" />
+                  Missing Important Skills
+                </h3>
                 <div className="flex flex-wrap gap-2">
                   {result.missing.map((skill: string, idx: number) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm"
-                    >
-                      {skill}
-                    </span>
+                    <span key={idx} className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm">{skill}</span>
                   ))}
                 </div>
-              )}
-              <p className="text-sm text-gray-500 mt-2">
-                Consider adding these keywords to improve ATS score.
-              </p>
-            </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  Consider adding these keywords to improve ATS score.
+                </p>
+              </div>
+            )}
 
-            {/* Text Preview */}
             <div>
               <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-gray-500" />
