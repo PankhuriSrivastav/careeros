@@ -38,7 +38,9 @@ export default function DashboardPage() {
 
   const handleCreateApplication = async (app: { company: string; role: string; status: string }) => {
     const newApp = {
-      ...app,
+      company: app.company,
+      role: app.role,
+      status: app.status as 'Applied' | 'OA' | 'Interview' | 'Offer' | 'Rejected',
       applied_date: new Date().toISOString().split('T')[0],
     };
     await apiService.createApplication(newApp);
