@@ -59,9 +59,15 @@ async def init_db():
 
 # ---------- FastAPI ----------
 app = FastAPI(title="CareerOS API")
+
+# ✅ CORS Configuration - FIXED for Vercel frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",                      # Local development
+        "https://careeros-ny7q.vercel.app",           # Your Vercel frontend
+        "https://careeros-7vwa.vercel.app",           # Alternative Vercel frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
