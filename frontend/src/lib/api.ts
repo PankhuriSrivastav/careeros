@@ -87,6 +87,12 @@ export const apiService = {
     await api.delete(`/applications/${id}`);
   },
 
+  // ✅ NEW: Update application (Edit feature)
+  async updateApplication(id: string, app: Omit<JobApplication, 'id'>): Promise<JobApplication> {
+    const response = await api.put(`/applications/${id}`, app);
+    return response.data;
+  },
+
   // Resume analysis (sends PDF file)
   async analyzeResume(file: File): Promise<any> {
     const formData = new FormData();

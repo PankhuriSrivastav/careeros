@@ -52,6 +52,19 @@ export default function DashboardPage() {
     await loadApplications();
   };
 
+  // ✅ NEW: Update application (Edit feature)
+  const handleUpdateApplication = async (id: string, app: Omit<JobApplication, 'id'>) => {
+    try {
+      await apiService.updateApplication(id, app);
+      await loadApplications();
+    } catch (error: any) {
+      console.error('Error updating application:', error);
+      if (error?.response?.status === 401) {
+        router.push('/login');
+      }
+    }
+  };
+
   const handleAnalyzeResume = async (file: File) => {
     return await apiService.analyzeResume(file);
   };
@@ -100,6 +113,7 @@ export default function DashboardPage() {
               applications={applications}
               onCreate={handleCreateApplication}
               onDelete={handleDeleteApplication}
+              onUpdate={handleUpdateApplication}
             />
           )}
           {activeTab === 'resume' && (

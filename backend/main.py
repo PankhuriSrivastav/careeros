@@ -209,6 +209,37 @@ async def delete_application(
         raise HTTPException(404, "Application not found")
     return {"message": "Deleted"}
 
+# ✅ NEW: Edit Application Endpoint
+@app.put("/applications/{app_id}")
+async def update_application(
+    app_id: str,
+    app_data: JobApplication,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Check if application exists and belongs to user
+    stmt = select(ApplicationTable).where(
+        ApplicationTable.id == app_id,
+        ApplicationTable.user_id == current_user["sub"]
+    )
+    result = await db.execute(stmt)
+    existing_app = result.scalar_one_or_none()
+    
+    if not existing_app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Update fields
+    existing_app.company = app_data.company
+    existing_app.role = app_data.role
+    existing_app.status = app_data.status
+    existing_app.applied_date = app_data.applied_date
+    existing_app.salary = app_data.salary
+    existing_app.notes = app_data.notes
+    
+    await db.commit()
+    
+    return {"message": "Application updated", "id": app_id}
+
 @app.post("/resume/analyze")
 async def analyze_resume(
     file: UploadFile = File(...),

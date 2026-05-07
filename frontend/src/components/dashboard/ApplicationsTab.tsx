@@ -9,9 +9,10 @@ interface ApplicationsTabProps {
   applications: JobApplication[];
   onCreate: (app: { company: string; role: string; status: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onUpdate: (id: string, app: Omit<JobApplication, 'id'>) => Promise<void>;  // ✅ Added
 }
 
-export default function ApplicationsTab({ applications, onCreate, onDelete }: ApplicationsTabProps) {
+export default function ApplicationsTab({ applications, onCreate, onDelete, onUpdate }: ApplicationsTabProps) {
   const stats = {
     total: applications.length,
     applied: applications.filter(a => a.status === 'Applied').length,
@@ -28,7 +29,11 @@ export default function ApplicationsTab({ applications, onCreate, onDelete }: Ap
 
       <StatsCards {...stats} />
       <ApplicationForm onSubmit={onCreate} />
-      <ApplicationList applications={applications} onDelete={onDelete} />
+      <ApplicationList
+        applications={applications}
+        onDelete={onDelete}
+        onUpdate={onUpdate}  // ✅ Passed to ApplicationList
+      />
     </>
   );
 }
