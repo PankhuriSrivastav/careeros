@@ -50,7 +50,7 @@ class UserResumeTable(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, index=True)
     resume_text = Column(Text)
-    keywords = Column(Text)  # store as JSON string or comma-separated
+    keywords = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 async def init_db():
@@ -60,13 +60,13 @@ async def init_db():
 # ---------- FastAPI ----------
 app = FastAPI(title="CareerOS API")
 
-# ✅ CORS Configuration - FIXED for Vercel frontend
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",                      # Local development
-        "https://careeros-ny7q.vercel.app",           # Your Vercel frontend
-        "https://careeros-7vwa.vercel.app",           # Alternative Vercel frontend
+        "http://localhost:3000",
+        "https://careeros-ny7q.vercel.app",
+        "https://careeros-7vwa.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -112,12 +112,12 @@ class UserLogin(BaseModel):
 
 class JobMatchRequest(BaseModel):
     job_description: str
-    resume_text: Optional[str] = None  # if not provided, use latest stored
+    resume_text: Optional[str] = None
 
 # ---------- Helper functions ----------
 def extract_keywords(text: str, top_n: int = 20):
     words = text.lower().split()
-    stopwords = {"the","and","for","with","experience","skills","of","to","in","that","is","are","was","were","a","an","on","at","by","be","this","from","as","i","you","we","they","your","our","their","have","has","had","will","would","could","should","may","might","must","also","etc","via","via","etc"}
+    stopwords = {"the","and","for","with","experience","skills","of","to","in","that","is","are","was","were","a","an","on","at","by","be","this","from","as","i","you","we","they","your","our","their","have","has","had","will","would","could","should","may","might","must","also","etc","via","etc"}
     words = [re.sub(r'[^a-z]', '', w) for w in words if len(w) > 2 and w not in stopwords and re.match(r'^[a-z]+$', w)]
     counter = Counter(words)
     return [w for w, _ in counter.most_common(top_n)]
@@ -130,7 +130,7 @@ def calculate_match(resume_keywords: List[str], job_keywords: List[str]):
     match_percent = len(matched) / len(job_set) * 100 if job_set else 0
     return round(match_percent), list(missing)
 
-# ---------- API endpoints ----------
+# ---------- API Endpoints ----------
 @app.on_event("startup")
 async def startup():
     await init_db()
@@ -209,7 +209,7 @@ async def delete_application(
         raise HTTPException(404, "Application not found")
     return {"message": "Deleted"}
 
-# ✅ NEW: Edit Application Endpoint
+# ✅ PUT endpoint for editing applications
 @app.put("/applications/{app_id}")
 async def update_application(
     app_id: str,
@@ -217,7 +217,7 @@ async def update_application(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Check if application exists and belongs to user
+    # Find the application
     stmt = select(ApplicationTable).where(
         ApplicationTable.id == app_id,
         ApplicationTable.user_id == current_user["sub"]
@@ -235,6 +235,7 @@ async def update_application(
     existing_app.applied_date = app_data.applied_date
     existing_app.salary = app_data.salary
     existing_app.notes = app_data.notes
+    existing_app.updated_at = datetime.utcnow()
     
     await db.commit()
     
@@ -254,7 +255,6 @@ async def analyze_resume(
     missing = [skill for skill in ideal_skills if skill not in keywords]
     score = max(0, 100 - len(missing) * 8)
 
-    # Store the resume text and keywords for future matching
     new_resume = UserResumeTable(
         user_id=current_user["sub"],
         resume_text=text,
@@ -276,7 +276,6 @@ async def match_job(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Get the latest resume for this user
     if request.resume_text:
         resume_text = request.resume_text
     else:
@@ -291,7 +290,6 @@ async def match_job(
     job_keywords = extract_keywords(request.job_description, top_n=30)
     match_percent, missing_keywords = calculate_match(resume_keywords, job_keywords)
 
-    # Simple suggestions
     suggestions = []
     if match_percent < 50:
         suggestions.append("Your resume shares few keywords with this job description. Consider adding relevant skills and experiences.")
