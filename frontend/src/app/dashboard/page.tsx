@@ -8,9 +8,10 @@ import ApplicationsTab from '@/components/dashboard/ApplicationsTab';
 import ResumeAnalyzerTab from '@/components/dashboard/ResumeAnalyzerTab';
 import JobMatcherTab from '@/components/dashboard/JobMatcherTab';
 import AnalyticsPage from './analytics/page';
+import SkillGapAnalyzerPage from './skill-gap/page';
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<'applications' | 'resume' | 'match' | 'analytics'>('applications');
+  const [activeTab, setActiveTab] = useState<'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap'>('applications');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -99,6 +100,7 @@ export default function DashboardPage() {
             {activeTab === 'resume' && 'Resume AI'}
             {activeTab === 'match' && 'Job Matcher'}
             {activeTab === 'analytics' && 'Analytics Dashboard'}
+            {activeTab === 'skill-gap' && 'Skill Gap Analyzer'}
           </h1>
           <button
             onClick={handleLogout}
@@ -125,6 +127,9 @@ export default function DashboardPage() {
           )}
           {activeTab === 'analytics' && (
             <AnalyticsPage />
+          )}
+          {activeTab === 'skill-gap' && (
+            <SkillGapAnalyzerPage />
           )}
         </div>
       </div>
