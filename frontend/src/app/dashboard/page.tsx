@@ -7,9 +7,10 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import ApplicationsTab from '@/components/dashboard/ApplicationsTab';
 import ResumeAnalyzerTab from '@/components/dashboard/ResumeAnalyzerTab';
 import JobMatcherTab from '@/components/dashboard/JobMatcherTab';
+import AnalyticsPage from './analytics/page';
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<'applications' | 'resume' | 'match'>('applications');
+  const [activeTab, setActiveTab] = useState<'applications' | 'resume' | 'match' | 'analytics'>('applications');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -52,7 +53,6 @@ export default function DashboardPage() {
     await loadApplications();
   };
 
-  // ✅ NEW: Update application (Edit feature)
   const handleUpdateApplication = async (id: string, app: Omit<JobApplication, 'id'>) => {
     try {
       await apiService.updateApplication(id, app);
@@ -98,6 +98,7 @@ export default function DashboardPage() {
             {activeTab === 'applications' && 'Job Tracker'}
             {activeTab === 'resume' && 'Resume AI'}
             {activeTab === 'match' && 'Job Matcher'}
+            {activeTab === 'analytics' && 'Analytics Dashboard'}
           </h1>
           <button
             onClick={handleLogout}
@@ -121,6 +122,9 @@ export default function DashboardPage() {
           )}
           {activeTab === 'match' && (
             <JobMatcherTab onMatch={handleMatchJob} />
+          )}
+          {activeTab === 'analytics' && (
+            <AnalyticsPage />
           )}
         </div>
       </div>
