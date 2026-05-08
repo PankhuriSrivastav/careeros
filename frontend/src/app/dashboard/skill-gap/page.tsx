@@ -3,272 +3,231 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
-import { Briefcase, TrendingUp, AlertCircle, CheckCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { 
+  Briefcase, 
+  TrendingUp, 
+  CheckCircle, 
+  AlertCircle, 
+  ExternalLink, 
+  Upload,
+  Loader2,
+  Target,
+  BookOpen
+} from 'lucide-react';
 
-interface SkillGap {
+interface CompanySkill {
   skill: string;
   priority: 'high' | 'medium' | 'low';
+  frequency: string;
+}
+
+interface CompanyData {
+  name: string;
+  tier: 'tier1' | 'tier2';
+  skills: CompanySkill[];
+  sampleProblems: { name: string; topic: string; difficulty: string; link: string }[];
   resources: { name: string; url: string }[];
 }
 
-interface CompanyRequirement {
-  company: string;
-  skills: { name: string; priority: 'high' | 'medium' | 'low' }[];
-}
-
-// Company skill requirements database
-const COMPANY_SKILLS: CompanyRequirement[] = [
+// Company database
+const COMPANY_DATABASE: CompanyData[] = [
   {
-    company: 'Google',
+    name: 'Google',
+    tier: 'tier1',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'System Design', priority: 'high' },
-      { name: 'Python', priority: 'high' },
-      { name: 'Java', priority: 'medium' },
-      { name: 'Distributed Systems', priority: 'high' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'Cloud Computing', priority: 'medium' },
-      { name: 'Machine Learning', priority: 'low' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '90% of interviews' },
+      { skill: 'System Design', priority: 'high', frequency: '75% of interviews' },
+      { skill: 'Dynamic Programming', priority: 'high', frequency: '65% of interviews' },
+      { skill: 'Python/Java', priority: 'high', frequency: '70% of interviews' },
+      { skill: 'Distributed Systems', priority: 'medium', frequency: '40% of interviews' },
+      { skill: 'Trees & Graphs', priority: 'medium', frequency: '50% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Longest Increasing Subsequence', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-increasing-subsequence' },
+      { name: 'Number of Islands', topic: 'Graph', difficulty: 'Medium', link: 'https://leetcode.com/problems/number-of-islands' },
+      { name: 'LRU Cache', topic: 'Design', difficulty: 'Medium', link: 'https://leetcode.com/problems/lru-cache' },
+    ],
+    resources: [
+      { name: 'LeetCode Google Tag', url: 'https://leetcode.com/tag/google' },
+      { name: 'GFG Google Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/google/' },
     ],
   },
   {
-    company: 'Amazon',
+    name: 'Amazon',
+    tier: 'tier1',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'System Design', priority: 'high' },
-      { name: 'Leadership Principles', priority: 'high' },
-      { name: 'Java', priority: 'high' },
-      { name: 'Distributed Systems', priority: 'high' },
-      { name: 'AWS', priority: 'high' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'OOP Concepts', priority: 'medium' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '95% of interviews' },
+      { skill: 'System Design', priority: 'high', frequency: '70% of interviews' },
+      { skill: 'Leadership Principles', priority: 'high', frequency: '100% of interviews' },
+      { skill: 'Java', priority: 'high', frequency: '60% of interviews' },
+      { skill: 'AWS', priority: 'medium', frequency: '40% of interviews' },
+      { skill: 'Object Oriented Design', priority: 'medium', frequency: '35% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Two Sum', topic: 'Array', difficulty: 'Easy', link: 'https://leetcode.com/problems/two-sum' },
+      { name: 'Maximum Subarray', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/maximum-subarray' },
+      { name: 'Rotate Image', topic: 'Matrix', difficulty: 'Medium', link: 'https://leetcode.com/problems/rotate-image' },
+    ],
+    resources: [
+      { name: 'LeetCode Amazon Tag', url: 'https://leetcode.com/tag/amazon' },
+      { name: 'GFG Amazon Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/amazon/' },
     ],
   },
   {
-    company: 'Microsoft',
+    name: 'Microsoft',
+    tier: 'tier1',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'System Design', priority: 'high' },
-      { name: 'C#/.NET', priority: 'high' },
-      { name: 'Azure', priority: 'medium' },
-      { name: 'Problem Solving', priority: 'high' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'Operating Systems', priority: 'medium' },
-      { name: 'Communication', priority: 'medium' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '90% of interviews' },
+      { skill: 'System Design', priority: 'high', frequency: '60% of interviews' },
+      { skill: 'C#/.NET', priority: 'high', frequency: '50% of interviews' },
+      { skill: 'Problem Solving', priority: 'high', frequency: '85% of interviews' },
+      { skill: 'Azure', priority: 'medium', frequency: '30% of interviews' },
+      { skill: 'Operating Systems', priority: 'medium', frequency: '35% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Reverse Linked List', topic: 'Linked List', difficulty: 'Easy', link: 'https://leetcode.com/problems/reverse-linked-list' },
+      { name: 'Course Schedule', topic: 'Graph', difficulty: 'Medium', link: 'https://leetcode.com/problems/course-schedule' },
+      { name: 'Design Tic-Tac-Toe', topic: 'Design', difficulty: 'Medium', link: 'https://leetcode.com/problems/design-tic-tac-toe' },
+    ],
+    resources: [
+      { name: 'LeetCode Microsoft Tag', url: 'https://leetcode.com/tag/microsoft' },
+      { name: 'GFG Microsoft Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/microsoft/' },
     ],
   },
   {
-    company: 'Meta',
+    name: 'Meta',
+    tier: 'tier1',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'System Design', priority: 'high' },
-      { name: 'React', priority: 'high' },
-      { name: 'PHP/Hack', priority: 'medium' },
-      { name: 'JavaScript', priority: 'high' },
-      { name: 'Distributed Systems', priority: 'high' },
-      { name: 'Product Sense', priority: 'medium' },
-      { name: 'Leadership', priority: 'low' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '95% of interviews' },
+      { skill: 'System Design', priority: 'high', frequency: '80% of interviews' },
+      { skill: 'React', priority: 'high', frequency: '50% of interviews' },
+      { skill: 'JavaScript', priority: 'high', frequency: '60% of interviews' },
+      { skill: 'Product Sense', priority: 'medium', frequency: '40% of interviews' },
+      { skill: 'PHP/Hack', priority: 'low', frequency: '20% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Valid Parentheses', topic: 'Stack', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-parentheses' },
+      { name: 'Merge Intervals', topic: 'Array', difficulty: 'Medium', link: 'https://leetcode.com/problems/merge-intervals' },
+      { name: 'Lowest Common Ancestor', topic: 'Tree', difficulty: 'Medium', link: 'https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree' },
+    ],
+    resources: [
+      { name: 'LeetCode Meta Tag', url: 'https://leetcode.com/tag/facebook' },
+      { name: 'GFG Meta Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/facebook/' },
     ],
   },
   {
-    company: 'Netflix',
+    name: 'Flipkart',
+    tier: 'tier2',
     skills: [
-      { name: 'Java', priority: 'high' },
-      { name: 'Microservices', priority: 'high' },
-      { name: 'AWS', priority: 'high' },
-      { name: 'System Design', priority: 'high' },
-      { name: 'Data Structures & Algorithms', priority: 'medium' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'CI/CD', priority: 'medium' },
-      { name: 'Cloud Computing', priority: 'high' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '85% of interviews' },
+      { skill: 'Java', priority: 'high', frequency: '60% of interviews' },
+      { skill: 'Spring Boot', priority: 'medium', frequency: '40% of interviews' },
+      { skill: 'System Design', priority: 'medium', frequency: '35% of interviews' },
+      { skill: 'Microservices', priority: 'medium', frequency: '30% of interviews' },
+      { skill: 'REST APIs', priority: 'medium', frequency: '40% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Max Sliding Window', topic: 'Queue', difficulty: 'Hard', link: 'https://leetcode.com/problems/sliding-window-maximum' },
+      { name: 'Clone Graph', topic: 'Graph', difficulty: 'Medium', link: 'https://leetcode.com/problems/clone-graph' },
+    ],
+    resources: [
+      { name: 'GFG Flipkart Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/flipkart/' },
     ],
   },
   {
-    company: 'Flipkart',
+    name: 'Zomato',
+    tier: 'tier2',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'Java', priority: 'high' },
-      { name: 'Spring Boot', priority: 'high' },
-      { name: 'System Design', priority: 'medium' },
-      { name: 'Microservices', priority: 'medium' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'Linux', priority: 'low' },
-      { name: 'Docker', priority: 'low' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '80% of interviews' },
+      { skill: 'Python/JavaScript', priority: 'high', frequency: '70% of interviews' },
+      { skill: 'System Design', priority: 'medium', frequency: '30% of interviews' },
+      { skill: 'SQL', priority: 'medium', frequency: '40% of interviews' },
+      { skill: 'REST APIs', priority: 'medium', frequency: '45% of interviews' },
+      { skill: 'Node.js/React', priority: 'low', frequency: '25% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Find the Winner', topic: 'Array', difficulty: 'Medium', link: 'https://leetcode.com/problems/find-the-winner' },
+    ],
+    resources: [
+      { name: 'GFG Zomato Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/zomato/' },
     ],
   },
   {
-    company: 'Zomato',
+    name: 'Razorpay',
+    tier: 'tier2',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'Python', priority: 'medium' },
-      { name: 'JavaScript', priority: 'medium' },
-      { name: 'React', priority: 'medium' },
-      { name: 'System Design', priority: 'medium' },
-      { name: 'SQL', priority: 'medium' },
-      { name: 'Node.js', priority: 'low' },
-      { name: 'Problem Solving', priority: 'high' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '85% of interviews' },
+      { skill: 'Python', priority: 'high', frequency: '70% of interviews' },
+      { skill: 'System Design', priority: 'medium', frequency: '35% of interviews' },
+      { skill: 'Django/Flask', priority: 'medium', frequency: '30% of interviews' },
+      { skill: 'Fintech Domain', priority: 'low', frequency: '20% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Coin Change', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/coin-change' },
+    ],
+    resources: [
+      { name: 'GFG Razorpay Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/razorpay/' },
     ],
   },
   {
-    company: 'Razorpay',
+    name: 'CRED',
+    tier: 'tier2',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'Python', priority: 'high' },
-      { name: 'Django', priority: 'medium' },
-      { name: 'System Design', priority: 'medium' },
-      { name: 'Fintech Domain', priority: 'medium' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'REST APIs', priority: 'high' },
-      { name: 'Security', priority: 'medium' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '80% of interviews' },
+      { skill: 'Python/Go', priority: 'high', frequency: '60% of interviews' },
+      { skill: 'System Design', priority: 'high', frequency: '45% of interviews' },
+      { skill: 'Microservices', priority: 'medium', frequency: '30% of interviews' },
+      { skill: 'Fintech Domain', priority: 'medium', frequency: '25% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Design a Key-Value Store', topic: 'Design', difficulty: 'Hard', link: 'https://leetcode.com/problems/design-a-key-value-store' },
+    ],
+    resources: [
+      { name: 'LeetCode', url: 'https://leetcode.com' },
     ],
   },
   {
-    company: 'CRED',
+    name: 'PhonePe',
+    tier: 'tier2',
     skills: [
-      { name: 'Data Structures & Algorithms', priority: 'high' },
-      { name: 'Python', priority: 'high' },
-      { name: 'Go', priority: 'medium' },
-      { name: 'System Design', priority: 'high' },
-      { name: 'Microservices', priority: 'medium' },
-      { name: 'AWS', priority: 'medium' },
-      { name: 'Database Management', priority: 'medium' },
-      { name: 'Fintech Domain', priority: 'medium' },
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '85% of interviews' },
+      { skill: 'Java', priority: 'high', frequency: '65% of interviews' },
+      { skill: 'System Design', priority: 'medium', frequency: '30% of interviews' },
+      { skill: 'Fintech Domain', priority: 'low', frequency: '20% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Minimum Jumps', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/jump-game-ii' },
+    ],
+    resources: [
+      { name: 'LeetCode', url: 'https://leetcode.com' },
+    ],
+  },
+  {
+    name: 'Swiggy',
+    tier: 'tier2',
+    skills: [
+      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '80% of interviews' },
+      { skill: 'System Design', priority: 'high', frequency: '40% of interviews' },
+      { skill: 'Python/Java', priority: 'high', frequency: '60% of interviews' },
+      { skill: 'Microservices', priority: 'medium', frequency: '30% of interviews' },
+    ],
+    sampleProblems: [
+      { name: 'Design Twitter Feed', topic: 'Design', difficulty: 'Medium', link: 'https://leetcode.com/problems/design-twitter' },
+    ],
+    resources: [
+      { name: 'LeetCode', url: 'https://leetcode.com' },
     ],
   },
 ];
 
-// Resource links for each skill
-const SKILL_RESOURCES: Record<string, { name: string; url: string }[]> = {
-  'Data Structures & Algorithms': [
-    { name: 'LeetCode', url: 'https://leetcode.com' },
-    { name: 'GeeksforGeeks', url: 'https://geeksforgeeks.org' },
-    { name: 'Striver\'s A2Z DSA Sheet', url: 'https://takeuforward.org/strivers-a2z-dsa-course' },
-  ],
-  'System Design': [
-    { name: 'Grokking System Design (Free)', url: 'https://www.youtube.com/c/GauravSen' },
-    { name: 'System Design Primer', url: 'https://github.com/donnemartin/system-design-primer' },
-    { name: 'ByteByteGo', url: 'https://blog.bytebytego.com' },
-  ],
-  'Python': [
-    { name: 'Python Official Tutorial', url: 'https://docs.python.org/3/tutorial' },
-    { name: 'Real Python', url: 'https://realpython.com' },
-  ],
-  'Java': [
-    { name: 'Java Tutorial (W3Schools)', url: 'https://w3schools.com/java' },
-    { name: 'Java Programming Masterclass (Free)', url: 'https://youtube.com/playlist?list=PLL8woMHwr36EDxjNocnR8-HayJHrrbgU-' },
-  ],
-  'JavaScript': [
-    { name: 'JavaScript.info', url: 'https://javascript.info' },
-    { name: 'Modern JS Tutorial', url: 'https://github.com/getify/You-Dont-Know-JS' },
-  ],
-  'React': [
-    { name: 'React Official Tutorial', url: 'https://react.dev/learn' },
-    { name: 'FreeCodeCamp React Course', url: 'https://youtu.be/bMknfKXIFA8' },
-  ],
-  'AWS': [
-    { name: 'AWS Free Training', url: 'https://aws.amazon.com/training' },
-    { name: 'Cloud Practitioner (Free)', url: 'https://www.youtube.com/watch?v=3hLmDS179YE' },
-  ],
-  'Docker': [
-    { name: 'Docker Official Tutorial', url: 'https://docs.docker.com/get-started' },
-    { name: 'FreeCodeCamp Docker Course', url: 'https://youtu.be/fqMOX6JJhGo' },
-  ],
-  'SQL': [
-    { name: 'SQL Tutorial (W3Schools)', url: 'https://w3schools.com/sql' },
-    { name: 'LeetCode SQL Problems', url: 'https://leetcode.com/problemset/database' },
-  ],
-  'Spring Boot': [
-    { name: 'Spring Boot Tutorial', url: 'https://spring.io/guides' },
-    { name: 'Java Brains YouTube', url: 'https://youtube.com/c/JavaBrains' },
-  ],
-  'Microservices': [
-    { name: 'Microservices.io', url: 'https://microservices.io' },
-    { name: 'FreeCodeCamp Microservices', url: 'https://youtu.be/CGeI3uDmfS0' },
-  ],
-  'Operating Systems': [
-    { name: 'OS Tutorial (GFG)', url: 'https://geeksforgeeks.org/operating-systems' },
-    { name: 'Neso Academy OS', url: 'https://youtube.com/playlist?list=PLBlnK6fEyqRjW3Kv3vN6zP8HrPxmKxYJ4' },
-  ],
-  'Communication': [
-    { name: 'Soft Skills Guide', url: 'https://www.mindtools.com' },
-    { name: 'Corporate Communication', url: 'https://alison.com/course/corporate-communication' },
-  ],
-  'Leadership Principles': [
-    { name: 'Amazon Leadership Principles', url: 'https://www.amazon.jobs/content/en/our-workplace/leadership-principles' },
-    { name: 'STAR Method Guide', url: 'https://www.themuse.com/advice/star-interview-method' },
-  ],
-  'Problem Solving': [
-    { name: 'LeetCode', url: 'https://leetcode.com' },
-    { name: 'GFG Problem Solving', url: 'https://geeksforgeeks.org/problems' },
-  ],
-  'OOP Concepts': [
-    { name: 'OOP Tutorial (GFG)', url: 'https://geeksforgeeks.org/object-oriented-programming-in-java' },
-    { name: 'OOP in Python', url: 'https://realpython.com/python3-object-oriented-programming' },
-  ],
-  'Node.js': [
-    { name: 'Node.js Official Guide', url: 'https://nodejs.org/en/docs/guides' },
-    { name: 'FreeCodeCamp Node.js', url: 'https://youtu.be/Oe421EPjeBE' },
-  ],
-  'C#/.NET': [
-    { name: 'Microsoft Learning', url: 'https://learn.microsoft.com/en-us/dotnet/csharp' },
-    { name: 'FreeCodeCamp C#', url: 'https://youtu.be/GhQdlIFylQ8' },
-  ],
-  'PHP/Hack': [
-    { name: 'PHP Tutorial (W3Schools)', url: 'https://w3schools.com/php' },
-    { name: 'HackLang Docs', url: 'https://docs.hhvm.com/hack' },
-  ],
-  'Go': [
-    { name: 'Go Tour', url: 'https://go.dev/tour' },
-    { name: 'FreeCodeCamp Go', url: 'https://youtu.be/Sq8MLN9PH28' },
-  ],
-  'Django': [
-    { name: 'Django Official Tutorial', url: 'https://docs.djangoproject.com/en/5.0/intro' },
-    { name: 'Django for APIs', url: 'https://learndjango.com/tutorials' },
-  ],
-  'CI/CD': [
-    { name: 'GitHub Actions Guide', url: 'https://docs.github.com/en/actions' },
-    { name: 'Jenkins Tutorial', url: 'https://www.jenkins.io/doc/tutorials' },
-  ],
-  'Cloud Computing': [
-    { name: 'AWS Free Training', url: 'https://aws.amazon.com/training' },
-    { name: 'Google Cloud Skills Boost', url: 'https://cloud.google.com/training' },
-  ],
-  'Security': [
-    { name: 'OWASP Top 10', url: 'https://owasp.org/www-project-top-ten' },
-    { name: 'Web Security Basics', url: 'https://www.freecodecamp.org/news/web-security' },
-  ],
-  'Fintech Domain': [
-    { name: 'RBI Guidelines', url: 'https://rbi.org.in' },
-    { name: 'Fintech Explained', url: 'https://www.investopedia.com/terms/f/fintech.asp' },
-  ],
-  'Product Sense': [
-    { name: 'Product Management Guide', url: 'https://www.productplan.com' },
-    { name: 'Cracking Product Interviews', url: 'https://www.productinterview.com' },
-  ],
-  'Distributed Systems': [
-    { name: 'Distributed Systems Guide', url: 'https://www.freecodecamp.org/news/distributed-systems' },
-    { name: 'MIT Distributed Systems', url: 'https://www.youtube.com/playlist?list=PLUl4u3cNGP63J0KXxqjzBoSVVudJXhFjQ' },
-  ],
-  'Database Management': [
-    { name: 'SQL Tutorial (W3Schools)', url: 'https://w3schools.com/sql' },
-    { name: 'Database Design Guide', url: 'https://www.freecodecamp.org/news/database-design' },
-  ],
-  'Azure': [
-    { name: 'Azure Free Learning', url: 'https://learn.microsoft.com/en-us/training/azure' },
-    { name: 'Azure Fundamentals', url: 'https://www.youtube.com/watch?v=Jf09HBb0e9s' },
-  ],
-  'Linux': [
-    { name: 'Linux Journey', url: 'https://linuxjourney.com' },
-    { name: 'Linux Tutorial', url: 'https://www.freecodecamp.org/news/linux-commands' },
-  ],
-};
-
 export default function SkillGapAnalyzerPage() {
-  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [customCompany, setCustomCompany] = useState('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
   const [resumeSkills, setResumeSkills] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [skillGaps, setSkillGaps] = useState<SkillGap[]>([]);
+  const [showResumeUpload, setShowResumeUpload] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [hasResume, setHasResume] = useState(false);
   const router = useRouter();
 
@@ -276,92 +235,24 @@ export default function SkillGapAnalyzerPage() {
     if (!apiService.isAuthenticated()) {
       router.push('/login');
     } else {
-      loadResumeSkills();
+      checkResumeExists();
     }
   }, []);
 
-  const loadResumeSkills = async () => {
+  const checkResumeExists = async () => {
     try {
-      const applications = await apiService.getApplications();
-      // Try to get resume keywords from stored data
-      // For now, we'll use a placeholder or get from user profile
-      // In production, you'd fetch from a resume analysis endpoint
-      setHasResume(true);
-      // Placeholder skills from resume analysis
-      setResumeSkills(['Python', 'JavaScript', 'React', 'Node.js', 'SQL', 'Git']);
+      // Check if user has uploaded resume before
+      // For now, just check localStorage or a flag
+      // In production, fetch from API
+      setHasResume(false);
     } catch (error) {
-      console.error('Error loading resume skills:', error);
-    } finally {
-      setLoading(false);
+      console.error(error);
     }
   };
 
-  const toggleCompany = (company: string) => {
-    if (selectedCompanies.includes(company)) {
-      setSelectedCompanies(selectedCompanies.filter(c => c !== company));
-    } else if (selectedCompanies.length < 5) {
-      setSelectedCompanies([...selectedCompanies, company]);
-    }
-  };
-
-  const analyzeGaps = async () => {
-    if (selectedCompanies.length === 0) return;
-    
-    setAnalyzing(true);
-    
-    // Get all required skills from selected companies
-    const requiredSkillsMap = new Map<string, { priority: 'high' | 'medium' | 'low'; companies: string[] }>();
-    
-    selectedCompanies.forEach(company => {
-      const companyData = COMPANY_SKILLS.find(c => c.company === company);
-      if (companyData) {
-        companyData.skills.forEach(skill => {
-          const existing = requiredSkillsMap.get(skill.name);
-          if (existing) {
-            existing.companies.push(company);
-            if (skill.priority === 'high') existing.priority = 'high';
-          } else {
-            requiredSkillsMap.set(skill.name, {
-              priority: skill.priority,
-              companies: [company],
-            });
-          }
-        });
-      }
-    });
-    
-    // Find gaps (skills not in resume)
-    const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
-    const gaps: SkillGap[] = [];
-    
-    requiredSkillsMap.forEach((value, skill) => {
-      const skillLower = skill.toLowerCase();
-      const hasSkill = resumeSkillsLower.some(rs => 
-        rs.includes(skillLower) || skillLower.includes(rs)
-      );
-      
-      if (!hasSkill) {
-        const resources = SKILL_RESOURCES[skill] || [
-          { name: 'Google Search', url: `https://www.google.com/search?q=Learn+${encodeURIComponent(skill)}+programming` },
-        ];
-        
-        gaps.push({
-          skill,
-          priority: value.priority,
-          resources,
-        });
-      }
-    });
-    
-    // Sort by priority (high first)
-    gaps.sort((a, b) => {
-      const order = { high: 0, medium: 1, low: 2 };
-      return order[a.priority] - order[b.priority];
-    });
-    
-    setSkillGaps(gaps);
-    setAnalyzing(false);
-  };
+  const filteredCompanies = COMPANY_DATABASE.filter(company =>
+    company.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -379,176 +270,285 @@ export default function SkillGapAnalyzerPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
-      </div>
-    );
-  }
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const result = await apiService.analyzeResume(file);
+      if (result && result.keywords) {
+        setResumeSkills(result.keywords);
+        setShowResumeUpload(true);
+        setHasResume(true);
+      }
+    } catch (error) {
+      console.error('Error uploading resume:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const checkSkillMatch = (skill: string): 'has' | 'partial' | 'missing' => {
+    if (!resumeSkills.length) return 'missing';
+    const skillLower = skill.toLowerCase();
+    const hasExact = resumeSkills.some(s => s.toLowerCase() === skillLower);
+    if (hasExact) return 'has';
+    const hasPartial = resumeSkills.some(s => skillLower.includes(s.toLowerCase()) || s.toLowerCase().includes(skillLower));
+    return hasPartial ? 'partial' : 'missing';
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Skill Gap Analyzer</h1>
           <p className="text-gray-600">
-            Select your dream companies and see what skills you're missing
+            Select a company to see what skills you need to prepare
           </p>
         </div>
 
-        {!hasResume ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-            <h2 className="text-xl font-semibold mb-2">No Resume Found</h2>
-            <p className="text-gray-600 mb-4">
-              Please upload your resume in the Resume Analyzer tab first.
-            </p>
+        {/* Resume Upload Banner */}
+        {!hasResume && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div className="flex items-center gap-4 flex-wrap md:flex-nowrap">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold mb-1">Upload Your Resume</h2>
+                <p className="text-gray-600 text-sm">
+                  Get personalized insights on which skills you already have
+                </p>
+              </div>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleResumeUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+                <div className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                  {uploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {uploading ? 'Uploading...' : 'Upload Resume'}
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Company Selection */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Target className="w-5 h-5 text-blue-600" />
+              Select a Company
+            </h2>
             <button
-              onClick={() => router.push('/dashboard/resume')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              onClick={() => setShowCustomInput(!showCustomInput)}
+              className="text-sm text-blue-600 hover:underline"
             >
-              Go to Resume Analyzer
+              {showCustomInput ? 'Browse companies' : '+ Add custom company'}
             </button>
           </div>
-        ) : (
-          <>
-            {/* Selected Companies */}
-            <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-blue-600" />
-                Select Dream Companies (up to 5)
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {COMPANY_SKILLS.map((company) => (
+
+          {showCustomInput ? (
+            <div>
+              <input
+                type="text"
+                placeholder="Enter company name..."
+                value={customCompany}
+                onChange={(e) => setCustomCompany(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              {customCompany && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    For {customCompany}, we recommend preparing:
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    <li>• Data Structures & Algorithms</li>
+                    <li>• System Design basics</li>
+                    <li>• Problem Solving</li>
+                  </ul>
+                  <p className="text-xs text-gray-500 mt-2">
+                    *Custom company data is generalized. For specific questions, check Glassdoor.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                placeholder="Search companies..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
+                {filteredCompanies.map((company) => (
                   <button
-                    key={company.company}
-                    onClick={() => toggleCompany(company.company)}
-                    className={`px-4 py-2 rounded-lg border transition ${
-                      selectedCompanies.includes(company.company)
+                    key={company.name}
+                    onClick={() => setSelectedCompany(company)}
+                    className={`px-3 py-2 rounded-lg border transition text-sm ${
+                      selectedCompany?.name === company.name
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
                     }`}
                   >
-                    {company.company}
+                    {company.name}
                   </button>
                 ))}
               </div>
-              
-              {selectedCompanies.length > 0 && (
-                <div className="mt-4 flex justify-between items-center">
-                  <p className="text-sm text-gray-500">
-                    Selected: {selectedCompanies.join(', ')}
-                  </p>
-                  <button
-                    onClick={analyzeGaps}
-                    disabled={analyzing}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
-                  >
-                    {analyzing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      'Analyze Skill Gaps'
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
+            </>
+          )}
+        </div>
 
-            {/* Your Resume Skills */}
-            <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                Skills Detected from Your Resume
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {resumeSkills.map((skill, idx) => (
-                  <span key={idx} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-              <p className="text-sm text-gray-500 mt-3">
-                *These skills are extracted from your resume. Add more projects to increase your skill set.
+        {/* Company Details */}
+        {selectedCompany && !showCustomInput && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+              <h2 className="text-xl font-bold text-white">{selectedCompany.name}</h2>
+              <p className="text-blue-100 text-sm mt-1">
+                {selectedCompany.tier === 'tier1' ? '🏆 Top Tier Company' : '📈 Product Based Company'}
               </p>
             </div>
 
-            {/* Skill Gaps Analysis */}
-            {skillGaps.length > 0 && (
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
-                  Skill Gaps Analysis
-                </h2>
-                <p className="text-gray-600 mb-6">
-                  Based on your selected companies, you're missing these skills:
-                </p>
-                
-                <div className="space-y-4">
-                  {skillGaps.map((gap, idx) => (
-                    <div key={idx} className={`border rounded-lg p-4 ${getPriorityColor(gap.priority)}`}>
+            {/* Skills Section */}
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-purple-600" />
+                Skills to Prepare
+              </h3>
+              <div className="space-y-3">
+                {selectedCompany.skills.map((skill, idx) => {
+                  const matchStatus = checkSkillMatch(skill.skill);
+                  return (
+                    <div key={idx} className={`border rounded-lg p-3 ${getPriorityColor(skill.priority)}`}>
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl">{getPriorityIcon(gap.priority)}</span>
-                            <h3 className="text-lg font-semibold">{gap.skill}</h3>
-                            <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${getPriorityColor(gap.priority)}`}>
-                              {gap.priority} priority
-                            </span>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{getPriorityIcon(skill.priority)}</span>
+                            <span className="font-semibold">{skill.skill}</span>
+                            <span className="text-xs opacity-75">{skill.frequency}</span>
                           </div>
-                          <p className="text-sm mb-3">
-                            {gap.priority === 'high' 
-                              ? 'This skill is frequently asked in interviews. Prioritize learning this.'
-                              : gap.priority === 'medium'
-                              ? 'This skill appears often. Consider adding it to your toolkit.'
-                              : 'Nice to have. Learn this after high-priority skills.'}
+                          <p className="text-xs opacity-75">
+                            {skill.priority === 'high' ? 'Must know' : skill.priority === 'medium' ? 'Important' : 'Nice to have'}
                           </p>
-                          <div className="flex flex-wrap gap-2">
-                            {gap.resources.map((resource, ridx) => (
-                              <a
-                                key={ridx}
-                                href={resource.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-white rounded-full text-sm hover:shadow transition"
-                              >
-                                {resource.name}
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            ))}
-                          </div>
                         </div>
+                        {resumeSkills.length > 0 && (
+                          <div className="ml-4">
+                            {matchStatus === 'has' && (
+                              <span className="text-green-600 flex items-center gap-1 text-sm">
+                                <CheckCircle className="w-4 h-4" /> You have this
+                              </span>
+                            )}
+                            {matchStatus === 'partial' && (
+                              <span className="text-yellow-600 text-sm">⚠️ Partially matched</span>
+                            )}
+                            {matchStatus === 'missing' && (
+                              <span className="text-gray-500 text-sm">❌ Not detected</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-                
-                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                  <h3 className="font-semibold mb-2">💡 Next Steps</h3>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-                    <li>Start with high-priority skills first (marked 🔴)</li>
-                    <li>Use the free resources provided above</li>
-                    <li>Add projects using these skills to your resume</li>
-                    <li>Re-upload your resume after adding new skills</li>
-                  </ul>
-                </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
-            {skillGaps.length === 0 && selectedCompanies.length > 0 && !analyzing && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                <h2 className="text-xl font-semibold mb-2">Great Match!</h2>
-                <p className="text-gray-600">
-                  Your resume skills match well with your selected companies!
+            {/* Sample Problems */}
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-green-600" />
+                Sample Problems
+              </h3>
+              <div className="grid gap-3">
+                {selectedCompany.sampleProblems.map((problem, idx) => (
+                  <a
+                    key={idx}
+                    href={problem.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                  >
+                    <div>
+                      <span className="font-medium">{problem.name}</span>
+                      <div className="flex gap-2 mt-1">
+                        <span className="text-xs px-2 py-0.5 bg-gray-200 rounded">{problem.topic}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          problem.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                          problem.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {problem.difficulty}
+                        </span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-gray-400" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Resources */}
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-orange-600" />
+                Free Resources
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {selectedCompany.resources.map((resource, idx) => (
+                  <a
+                    key={idx}
+                    href={resource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                  >
+                    {resource.name}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Summary */}
+            {resumeSkills.length > 0 && (
+              <div className="p-6 bg-green-50 border-t">
+                <h3 className="font-semibold mb-2">📊 Your Preparation Status</h3>
+                <p className="text-sm text-gray-700">
+                  Based on your resume, you have {selectedCompany.skills.filter(s => checkSkillMatch(s.skill) === 'has').length} out of {selectedCompany.skills.length} key skills.
+                </p>
+                <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-green-600 h-2 rounded-full transition-all"
+                    style={{ width: `${(selectedCompany.skills.filter(s => checkSkillMatch(s.skill) === 'has').length / selectedCompany.skills.length) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Keep learning the missing skills to improve your chances!
                 </p>
               </div>
             )}
-          </>
+          </div>
+        )}
+
+        {/* No selection state */}
+        {!selectedCompany && !showCustomInput && (
+          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+            <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold mb-2">No Company Selected</h2>
+            <p className="text-gray-500">
+              Select a company from the list above to see their skill requirements
+            </p>
+          </div>
         )}
       </div>
     </div>
