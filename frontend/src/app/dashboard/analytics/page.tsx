@@ -37,6 +37,13 @@ interface AnalyticsData {
 
 const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
 
+// Custom label formatter to avoid undefined percent
+const renderCustomLabel = (entry: any) => {
+  const percent = entry.percent;
+  if (percent === undefined) return entry.name;
+  return `${entry.name}: ${(percent * 100).toFixed(0)}%`;
+};
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,7 +111,7 @@ export default function AnalyticsPage() {
         insights.push("🎯 Your response rate is excellent! Keep up the good work.");
       } else if (responseRate > 30) {
         insights.push("📈 Your response rate is good. Consider optimizing your resume for better results.");
-      } else {
+      } else if (total > 0) {
         insights.push("📝 Your response rate needs improvement. Try tailoring your resume for each application.");
       }
       
@@ -120,6 +127,10 @@ export default function AnalyticsPage() {
         insights.push("🎉 Congratulations on your offer(s)! Your hard work is paying off.");
       } else if (interview > 0) {
         insights.push("💪 You're getting interviews! Focus on preparation to convert them into offers.");
+      } else if (total === 0) {
+        insights.push("✨ Add your first application to see insights and track your progress!");
+      } else {
+        insights.push("🚀 Keep applying! Every application brings you closer to your dream job.");
       }
       
       setData({
@@ -130,7 +141,7 @@ export default function AnalyticsPage() {
         rejected,
         responseRate,
         successRate,
-        averageResponseTime: 0, // Would need additional data
+        averageResponseTime: 0,
         applicationsOverTime,
         statusBreakdown,
         topCompanies,
@@ -251,7 +262,7 @@ export default function AnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={renderCustomLabel}
                     outerRadius={100}
                     fill="#8884d8"
                     dataKey="value"
@@ -302,11 +313,6 @@ export default function AnalyticsPage() {
                   <p className="text-gray-700">{insight}</p>
                 </div>
               ))}
-              {data.insights.length === 0 && (
-                <p className="text-gray-500 text-center py-8">
-                  Add more applications to see personalized insights
-                </p>
-              )}
             </div>
           </div>
         </div>
