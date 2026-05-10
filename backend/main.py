@@ -10,6 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from sqlalchemy import Column, String, DateTime, Text, desc, Boolean, Integer
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.sql import select, and_
@@ -57,11 +58,11 @@ engine = create_async_engine(
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
-# ---------- Models ----------
+# ---------- Models (UUID columns matching your database) ----------
 class ApplicationTable(Base):
     __tablename__ = "applications"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, index=True)  # Supabase Auth user IDs are strings (varchar)
     company = Column(String)
     role = Column(String)
     status = Column(String)
@@ -69,13 +70,13 @@ class ApplicationTable(Base):
     salary = Column(String, nullable=True)
     notes = Column(String, nullable=True)
     job_description = Column(Text, nullable=True)
-    jd_id = Column(String, nullable=True)
+    jd_id = Column(UUID(as_uuid=True), nullable=True)  # FK referencing job_descriptions (UUID)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class UserResumeTable(Base):
     __tablename__ = "user_resumes"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, index=True)
     resume_text = Column(Text)
     keywords = Column(Text)
@@ -83,7 +84,7 @@ class UserResumeTable(Base):
 
 class JobDescriptionTable(Base):
     __tablename__ = "job_descriptions"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_name = Column(String, index=True)
     role = Column(String)
     job_description = Column(Text)
@@ -94,14 +95,14 @@ class JobDescriptionTable(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    added_by_user_id = Column(String)
+    added_by_user_id = Column(String)  # Supabase user ID is a string
     times_used = Column(Integer, default=0)
     share_consent = Column(Boolean, default=False)
 
 class JDFeedbackTable(Base):
     __tablename__ = "jd_feedback"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    jd_id = Column(String, nullable=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    jd_id = Column(UUID(as_uuid=True), nullable=True)
     user_id = Column(String, nullable=True)
     is_accurate = Column(Boolean, nullable=True)
     comment = Column(Text, nullable=True)
@@ -113,6 +114,29 @@ async def init_db():
 
 # ---------- FastAPI ----------
 app = FastAPI(title="CareerOS API")
+
+# Custom JSON serialization for UUID objects
+import uuid as uuid_module
+def custom_json_serializer(obj):
+    if isinstance(obj, uuid_module.UUID):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+# Override default JSON encoder
+from fastapi.responses import JSONResponse
+import json as json_module
+
+class CustomJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json_module.dumps(
+            content,
+            default=custom_json_serializer,
+            ensure_ascii=False,
+            indent=None,
+        ).encode("utf-8")
+
+# Set as default response class
+app.default_response_class = CustomJSONResponse
 
 # CORS Configuration
 app.add_middleware(
@@ -326,12 +350,12 @@ async def create_application(
     db: AsyncSession = Depends(get_db)
 ):
     app_dict = app_data.dict()
-    app_dict["id"] = str(uuid.uuid4())
+    app_dict["id"] = uuid.uuid4()  # Now returns UUID object
     app_dict["user_id"] = current_user["sub"]
     stmt = ApplicationTable.__table__.insert().values(**app_dict)
     await db.execute(stmt)
     await db.commit()
-    return {"message": "Application added", "id": app_dict["id"]}
+    return {"message": "Application added", "id": str(app_dict["id"])}
 
 @app.get("/applications/")
 async def get_applications(
@@ -350,8 +374,12 @@ async def delete_application(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    try:
+        app_uuid = uuid.UUID(app_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid UUID format")
     stmt = ApplicationTable.__table__.delete().where(
-        ApplicationTable.id == app_id,
+        ApplicationTable.id == app_uuid,
         ApplicationTable.user_id == current_user["sub"]
     )
     res = await db.execute(stmt)
@@ -367,8 +395,12 @@ async def update_application(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    try:
+        app_uuid = uuid.UUID(app_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid UUID format")
     stmt = select(ApplicationTable).where(
-        ApplicationTable.id == app_id,
+        ApplicationTable.id == app_uuid,
         ApplicationTable.user_id == current_user["sub"]
     )
     result = await db.execute(stmt)
@@ -482,7 +514,7 @@ async def create_job_description(
     await db.refresh(new_jd)
     
     return {
-        "id": new_jd.id,
+        "id": str(new_jd.id),
         "extracted_skills": extracted_skills,
         "source_type": "community",
         "created_at": new_jd.created_at.isoformat() if new_jd.created_at else None
@@ -514,7 +546,7 @@ async def get_job_description_by_company_role(
         return {
             "exists": True,
             "source_type": "community",
-            "id": community_jd.id,
+            "id": str(community_jd.id),
             "extracted_skills": json.loads(community_jd.extracted_skills),
             "created_at": community_jd.created_at.isoformat(),
             "age_days": age_days,
