@@ -1,16 +1,18 @@
 import os
 import uuid
 import io
-from datetime import datetime
+import json
+import re
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, Text, desc
+from sqlalchemy import Column, String, DateTime, Text, desc, Boolean, Integer
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.sql import select
+from sqlalchemy.sql import select, and_
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from PyPDF2 import PdfReader
@@ -23,9 +25,15 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not all([SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL]):
     raise ValueError("Missing environment variables. Check .env file")
+
+# ---------- Gemini Setup ----------
+if GEMINI_API_KEY:
+    import google.generativeai as genai
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # ---------- Async SQLAlchemy ----------
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -43,7 +51,10 @@ class ApplicationTable(Base):
     applied_date = Column(String)
     salary = Column(String, nullable=True)
     notes = Column(String, nullable=True)
+    job_description = Column(Text, nullable=True)
+    jd_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class UserResumeTable(Base):
     __tablename__ = "user_resumes"
@@ -52,6 +63,23 @@ class UserResumeTable(Base):
     resume_text = Column(Text)
     keywords = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class JobDescriptionTable(Base):
+    __tablename__ = "job_descriptions"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    company_name = Column(String, index=True)
+    role = Column(String)
+    job_description = Column(Text)
+    extracted_skills = Column(Text)  # JSON array
+    extracted_keywords = Column(Text)
+    source_type = Column(String, default="community")  # "community" or "ai_estimate"
+    is_verified = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    added_by_user_id = Column(String)
+    times_used = Column(Integer, default=0)
+    share_consent = Column(Boolean, default=False)
 
 async def init_db():
     async with engine.begin() as conn:
@@ -100,6 +128,7 @@ class JobApplication(BaseModel):
     applied_date: str
     salary: Optional[str] = None
     notes: Optional[str] = None
+    job_description: Optional[str] = None
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -113,6 +142,12 @@ class UserLogin(BaseModel):
 class JobMatchRequest(BaseModel):
     job_description: str
     resume_text: Optional[str] = None
+
+class JobDescriptionCreate(BaseModel):
+    company_name: str
+    role: str
+    job_description: str
+    share_consent: bool = False
 
 # ---------- Helper functions ----------
 def extract_keywords(text: str, top_n: int = 20):
@@ -129,6 +164,67 @@ def calculate_match(resume_keywords: List[str], job_keywords: List[str]):
     missing = job_set - resume_set
     match_percent = len(matched) / len(job_set) * 100 if job_set else 0
     return round(match_percent), list(missing)
+
+async def extract_skills_with_gemini(text: str) -> List[str]:
+    """Extract skills from resume or JD using Gemini"""
+    if not GEMINI_API_KEY:
+        return extract_keywords(text, top_n=15)
+    
+    try:
+        model = genai.GenerativeModel('gemini-pro')
+        prompt = f"""
+Extract technical skills from the following text. 
+Return ONLY a JSON array of skill names, nothing else.
+
+Text: {text[:3000]}
+
+Example output: ["Python", "React", "System Design", "Docker", "AWS"]
+
+Output:"""
+        
+        response = model.generate_content(prompt)
+        json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+        if json_match:
+            skills = json.loads(json_match.group())
+            return skills[:15]
+        return extract_keywords(text, top_n=15)
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        return extract_keywords(text, top_n=15)
+
+async def get_company_skills_estimate(company: str, role: str) -> dict:
+    """Get estimated skills for a company using Gemini (fallback when no JD exists)"""
+    if not GEMINI_API_KEY:
+        return {
+            "skills": ["Data Structures & Algorithms", "Problem Solving", "System Design"],
+            "sample_problems": ["LeetCode Top Interview Questions"],
+            "resources": ["LeetCode", "GeeksforGeeks"]
+        }
+    
+    try:
+        model = genai.GenerativeModel('gemini-pro')
+        prompt = f"""
+What are the typical technical skills required for a {role} at {company}?
+Return ONLY a JSON object with this structure:
+{{
+  "skills": ["skill1", "skill2", "skill3"],
+  "sample_problems": ["problem1", "problem2"],
+  "resources": ["resource1", "resource2"]
+}}
+Only include the most important 5-7 skills. Keep it concise.
+"""
+        response = model.generate_content(prompt)
+        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+    except Exception as e:
+        print(f"Gemini estimate error: {e}")
+    
+    return {
+        "skills": ["Data Structures & Algorithms", "Problem Solving", "System Design"],
+        "sample_problems": ["LeetCode Top Interview Questions"],
+        "resources": ["LeetCode", "GeeksforGeeks"]
+    }
 
 # ---------- API Endpoints ----------
 @app.on_event("startup")
@@ -209,7 +305,6 @@ async def delete_application(
         raise HTTPException(404, "Application not found")
     return {"message": "Deleted"}
 
-# ✅ PUT endpoint for editing applications
 @app.put("/applications/{app_id}")
 async def update_application(
     app_id: str,
@@ -217,7 +312,6 @@ async def update_application(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Find the application
     stmt = select(ApplicationTable).where(
         ApplicationTable.id == app_id,
         ApplicationTable.user_id == current_user["sub"]
@@ -226,9 +320,8 @@ async def update_application(
     existing_app = result.scalar_one_or_none()
     
     if not existing_app:
-        raise HTTPException(status_code=404, detail="Application not found")
+        raise HTTPException(404, "Application not found")
     
-    # Update fields
     existing_app.company = app_data.company
     existing_app.role = app_data.role
     existing_app.status = app_data.status
@@ -250,9 +343,11 @@ async def analyze_resume(
     content = await file.read()
     pdf = PdfReader(io.BytesIO(content))
     text = "".join(page.extract_text() or "" for page in pdf.pages)
-    keywords = extract_keywords(text, top_n=20)
+    
+    # Use Gemini for skill extraction if available
+    keywords = await extract_skills_with_gemini(text)
     ideal_skills = {"python", "react", "mongodb", "express", "nodejs", "git", "docker", "aws", "javascript", "typescript"}
-    missing = [skill for skill in ideal_skills if skill not in keywords]
+    missing = [skill for skill in ideal_skills if skill not in [k.lower() for k in keywords]]
     score = max(0, 100 - len(missing) * 8)
 
     new_resume = UserResumeTable(
@@ -307,5 +402,83 @@ async def match_job(
         "job_keywords": job_keywords[:20],
         "missing_keywords": missing_keywords[:10],
         "suggestions": suggestions
+    }
+
+# ---------- Skill Gap Analyzer Endpoints ----------
+@app.post("/api/job-descriptions")
+async def create_job_description(
+    jd_data: JobDescriptionCreate,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Extract skills using Gemini
+    extracted_skills = await extract_skills_with_gemini(jd_data.job_description)
+    
+    new_jd = JobDescriptionTable(
+        company_name=jd_data.company_name,
+        role=jd_data.role,
+        job_description=jd_data.job_description,
+        extracted_skills=json.dumps(extracted_skills),
+        extracted_keywords=",".join(extracted_skills),
+        source_type="community",
+        added_by_user_id=current_user["sub"],
+        share_consent=jd_data.share_consent
+    )
+    db.add(new_jd)
+    await db.commit()
+    await db.refresh(new_jd)
+    
+    return {
+        "id": new_jd.id,
+        "extracted_skills": extracted_skills,
+        "source_type": "community",
+        "created_at": new_jd.created_at.isoformat() if new_jd.created_at else None
+    }
+
+@app.get("/api/job-descriptions/{company}/{role}")
+async def get_job_description_by_company_role(
+    company: str,
+    role: str,
+    db: AsyncSession = Depends(get_db)
+):
+    # Look for community JD first (within 6 months)
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+    
+    stmt = select(JobDescriptionTable).where(
+        and_(
+            JobDescriptionTable.company_name.ilike(company),
+            JobDescriptionTable.role.ilike(role),
+            JobDescriptionTable.source_type == "community",
+            JobDescriptionTable.created_at >= six_months_ago,
+            JobDescriptionTable.is_active == True
+        )
+    ).order_by(desc(JobDescriptionTable.created_at))
+    
+    result = await db.execute(stmt)
+    community_jd = result.scalar_one_or_none()
+    
+    if community_jd:
+        age_days = (datetime.utcnow() - community_jd.created_at).days
+        return {
+            "exists": True,
+            "source_type": "community",
+            "id": community_jd.id,
+            "extracted_skills": json.loads(community_jd.extracted_skills),
+            "created_at": community_jd.created_at.isoformat(),
+            "age_days": age_days,
+            "is_fresh": age_days < 30,
+            "job_description": community_jd.job_description
+        }
+    
+    # No community JD, use Gemini estimate
+    estimated_skills = await get_company_skills_estimate(company, role)
+    
+    return {
+        "exists": False,
+        "source_type": "ai_estimate",
+        "extracted_skills": estimated_skills.get("skills", []),
+        "sample_problems": estimated_skills.get("sample_problems", []),
+        "resources": estimated_skills.get("resources", []),
+        "message": "These skills are AI-estimated. Paste a real JD for accurate results."
     }
 # uvicorn main:app --reload --port 8000
