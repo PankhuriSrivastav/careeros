@@ -58,7 +58,7 @@ engine = create_async_engine(
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
-# ---------- Models (UUID + Array columns) ----------
+# ---------- Models ----------
 class ApplicationTable(Base):
     __tablename__ = "applications"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -79,7 +79,7 @@ class UserResumeTable(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, index=True)
     resume_text = Column(Text)
-    keywords = Column(Text)  # comma-separated string (kept as is)
+    keywords = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class JobDescriptionTable(Base):
@@ -88,7 +88,6 @@ class JobDescriptionTable(Base):
     company_name = Column(String, index=True)
     role = Column(String)
     job_description = Column(Text)
-    # These are now PostgreSQL arrays, not plain strings
     extracted_skills = Column(ARRAY(Text))
     extracted_keywords = Column(ARRAY(Text))
     source_type = Column(String, default="community")
@@ -96,7 +95,7 @@ class JobDescriptionTable(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    added_by_user_id = Column(String)
+    added_by_user_id = Column(UUID(as_uuid=True), nullable=True)  # ✅ FIXED
     times_used = Column(Integer, default=0)
     share_consent = Column(Boolean, default=False)
 
@@ -104,7 +103,7 @@ class JDFeedbackTable(Base):
     __tablename__ = "jd_feedback"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     jd_id = Column(UUID(as_uuid=True), nullable=True)
-    user_id = Column(String, nullable=True)
+    user_id = Column(UUID(as_uuid=True), nullable=True)  # ✅ FIXED (if your DB has UUID)
     is_accurate = Column(Boolean, nullable=True)
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -497,14 +496,20 @@ async def create_job_description(
 ):
     extracted_skills = await extract_skills_with_gemini(jd_data.job_description)
     
+    # Convert Supabase user ID (string) to UUID
+    try:
+        user_uuid = uuid.UUID(current_user["sub"])
+    except ValueError:
+        user_uuid = None  # fallback if not a valid UUID
+    
     new_jd = JobDescriptionTable(
         company_name=jd_data.company_name,
         role=jd_data.role,
         job_description=jd_data.job_description,
-        extracted_skills=extracted_skills,          # stored as list directly
-        extracted_keywords=extracted_skills,        # stored as list directly (array)
+        extracted_skills=extracted_skills,
+        extracted_keywords=extracted_skills,
         source_type="community",
-        added_by_user_id=current_user["sub"],
+        added_by_user_id=user_uuid,  # ✅ Now UUID
         share_consent=jd_data.share_consent
     )
     db.add(new_jd)
@@ -545,7 +550,7 @@ async def get_job_description_by_company_role(
             "exists": True,
             "source_type": "community",
             "id": str(community_jd.id),
-            "extracted_skills": community_jd.extracted_skills,  # already a list
+            "extracted_skills": community_jd.extracted_skills,
             "created_at": community_jd.created_at.isoformat(),
             "age_days": age_days,
             "is_fresh": age_days < 30,
