@@ -45,9 +45,13 @@ if GEMINI_API_KEY:
 engine = create_async_engine(
     DATABASE_URL,
     echo=True,
+    pool_pre_ping=True,
     connect_args={
         "statement_cache_size": 0,
         "prepared_statement_cache_size": 0,
+        "server_settings": {
+            "application_name": "careeros"
+        }
     }
 )
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -208,7 +212,6 @@ Output:"""
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
             skills = json.loads(json_match.group())
-            # Filter out common soft skills just in case
             soft_skills = {"problem solving", "communication", "teamwork", "leadership", 
                           "critical thinking", "time management", "creativity", "adaptability",
                           "work ethic", "attention to detail", "organization"}
@@ -256,7 +259,6 @@ Example for Amazon SDE: ["Java", "AWS", "Microservices", "System Design", "Data 
         json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
         if json_match:
             result = json.loads(json_match.group())
-            # Filter soft skills
             soft_skills = {"problem solving", "communication", "teamwork", "leadership"}
             if "skills" in result:
                 result["skills"] = [s for s in result["skills"] if s.lower() not in soft_skills]
