@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 import {
   LineChart,
@@ -18,7 +17,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
-import { Calendar, TrendingUp, Target, Clock, Award, AlertCircle } from 'lucide-react';
+import { Calendar, TrendingUp, Target, Clock, Award, AlertCircle, Loader2 } from 'lucide-react';
 
 interface AnalyticsData {
   totalApplications: number;
@@ -37,7 +36,6 @@ interface AnalyticsData {
 
 const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
 
-// Custom label formatter to avoid undefined percent
 const renderCustomLabel = (entry: any) => {
   const percent = entry.percent;
   if (percent === undefined) return entry.name;
@@ -47,21 +45,19 @@ const renderCustomLabel = (entry: any) => {
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!apiService.isAuthenticated()) {
-      router.push('/login');
-    } else {
-      loadAnalytics();
-    }
+    loadAnalytics();
   }, []);
 
   const loadAnalytics = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
       const applications = await apiService.getApplications();
       
-      // Calculate analytics
       const total = applications.length;
       const applied = applications.filter(a => a.status === 'Applied').length;
       const interview = applications.filter(a => a.status === 'Interview').length;
@@ -117,7 +113,7 @@ export default function AnalyticsPage() {
       
       if (applicationsOverTime.length > 0) {
         const lastWeek = applicationsOverTime.slice(-7);
-        const weeklyAvg = lastWeek.reduce((sum, d) => sum + d.count, 0) / 7;
+        const weeklyAvg = lastWeek.reduce((sum, d) => sum + d.count, 0) / Math.max(1, lastWeek.length);
         if (weeklyAvg > 2) {
           insights.push("🔥 You're applying consistently! This increases your chances significantly.");
         }
@@ -147,174 +143,201 @@ export default function AnalyticsPage() {
         topCompanies,
         insights,
       });
-    } catch (error) {
-      console.error('Error loading analytics:', error);
+    } catch (err: any) {
+      console.error('Error loading analytics:', err);
+      if (err?.response?.status === 401) {
+        setError('Session expired. Please log in again.');
+      } else {
+        setError('Failed to load analytics. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading analytics...</div>
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-lg text-gray-600">Loading analytics...</p>
+        </div>
       </div>
     );
   }
 
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <p className="text-lg text-red-600 font-medium mb-4">{error}</p>
+          <button
+            onClick={loadAnalytics}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No data state
   if (!data) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-red-500">Failed to load analytics</div>
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-lg text-gray-500">No analytics data available</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-          <p className="text-gray-600">Track your job search progress and insights</p>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Applications</p>
-                <p className="text-3xl font-bold text-blue-600">{data.totalApplications}</p>
-              </div>
-              <Calendar className="w-8 h-8 text-blue-400" />
+    <div className="space-y-8">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Total Applications</p>
+              <p className="text-3xl font-bold text-blue-600">{data.totalApplications}</p>
             </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Response Rate</p>
-                <p className="text-3xl font-bold text-green-600">{data.responseRate}%</p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-green-400" />
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Interviews</p>
-                <p className="text-3xl font-bold text-yellow-600">{data.interview}</p>
-              </div>
-              <Target className="w-8 h-8 text-yellow-400" />
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Offers</p>
-                <p className="text-3xl font-bold text-purple-600">{data.offer}</p>
-              </div>
-              <Award className="w-8 h-8 text-purple-400" />
-            </div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Success Rate</p>
-                <p className="text-3xl font-bold text-indigo-600">{data.successRate}%</p>
-              </div>
-              <Clock className="w-8 h-8 text-indigo-400" />
-            </div>
+            <Calendar className="w-8 h-8 text-blue-400" />
           </div>
         </div>
-
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Applications Over Time */}
-          <div className="bg-white p-6 rounded-xl shadow">
-            <h2 className="text-lg font-semibold mb-4">Applications Over Time</h2>
-            {data.applicationsOverTime.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data.applicationsOverTime}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="count" stroke="#3b82f6" name="Applications" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-72 flex items-center justify-center text-gray-500">
-                No application data in the last 30 days
-              </div>
-            )}
-          </div>
-
-          {/* Status Breakdown */}
-          <div className="bg-white p-6 rounded-xl shadow">
-            <h2 className="text-lg font-semibold mb-4">Status Breakdown</h2>
-            {data.statusBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={data.statusBreakdown}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={renderCustomLabel}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {data.statusBreakdown.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-72 flex items-center justify-center text-gray-500">
-                No application data yet
-              </div>
-            )}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Response Rate</p>
+              <p className="text-3xl font-bold text-green-600">{data.responseRate}%</p>
+            </div>
+            <TrendingUp className="w-8 h-8 text-green-400" />
           </div>
         </div>
-
-        {/* Top Companies */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow">
-            <h2 className="text-lg font-semibold mb-4">Top Companies Applied</h2>
-            {data.topCompanies.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={data.topCompanies} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="company" type="category" width={100} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#3b82f6" name="Applications" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-72 flex items-center justify-center text-gray-500">
-                No applications yet
-              </div>
-            )}
-          </div>
-
-          {/* Insights */}
-          <div className="bg-white p-6 rounded-xl shadow">
-            <h2 className="text-lg font-semibold mb-4">Insights & Recommendations</h2>
-            <div className="space-y-3">
-              {data.insights.map((insight, index) => (
-                <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-gray-700">{insight}</p>
-                </div>
-              ))}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Interviews</p>
+              <p className="text-3xl font-bold text-yellow-600">{data.interview}</p>
             </div>
+            <Target className="w-8 h-8 text-yellow-400" />
           </div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Offers</p>
+              <p className="text-3xl font-bold text-purple-600">{data.offer}</p>
+            </div>
+            <Award className="w-8 h-8 text-purple-400" />
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Success Rate</p>
+              <p className="text-3xl font-bold text-indigo-600">{data.successRate}%</p>
+            </div>
+            <Clock className="w-8 h-8 text-indigo-400" />
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold mb-4">Applications Over Time</h2>
+          {data.applicationsOverTime.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={data.applicationsOverTime}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="count" stroke="#3b82f6" name="Applications" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-72 flex items-center justify-center text-gray-400">
+              No application data in the last 30 days
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold mb-4">Status Breakdown</h2>
+          {data.statusBreakdown.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={data.statusBreakdown}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={renderCustomLabel}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {data.statusBreakdown.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-72 flex items-center justify-center text-gray-400">
+              No application data yet
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold mb-4">Top Companies Applied</h2>
+          {data.topCompanies.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data.topCompanies} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis dataKey="company" type="category" width={100} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#3b82f6" name="Applications" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-72 flex items-center justify-center text-gray-400">
+              No applications yet
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold mb-4">Insights & Recommendations</h2>
+          <div className="space-y-3">
+            {data.insights.map((insight, index) => (
+              <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-gray-700 text-sm">{insight}</p>
+              </div>
+            ))}
+          </div>
+          {data.totalApplications === 0 && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-700">
+                💡 <strong>Get started:</strong> Add your job applications in the Job Tracker tab to see analytics here.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

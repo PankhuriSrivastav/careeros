@@ -29,8 +29,9 @@ export default function DashboardPage() {
       const data = await apiService.getApplications();
       setApplications(data);
     } catch (error: any) {
-      console.error(error);
+      console.error('Error loading applications:', error);
       if (error?.response?.status === 401) {
+        apiService.logout();
         router.push('/login');
       }
     } finally {
@@ -61,30 +62,26 @@ export default function DashboardPage() {
     } catch (error: any) {
       console.error('Error updating application:', error);
       if (error?.response?.status === 401) {
+        apiService.logout();
         router.push('/login');
       }
     }
   };
 
-  const handleAnalyzeResume = async (file: File) => {
-    return await apiService.analyzeResume(file);
-  };
-
-  const handleMatchJob = async (jobDescription: string) => {
-    return await apiService.matchJob(jobDescription);
-  };
-
   const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      apiService.logout();
-      router.push('/login');
-    }
+    apiService.logout();
+    localStorage.clear();
+    router.push('/login');
   };
 
-  if (loading && activeTab === 'applications') {
+  // Show loading only on first load for applications tab
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading dashboard...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -104,7 +101,7 @@ export default function DashboardPage() {
           </h1>
           <button
             onClick={handleLogout}
-            className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+            className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
           >
             Logout
           </button>
@@ -120,10 +117,10 @@ export default function DashboardPage() {
             />
           )}
           {activeTab === 'resume' && (
-            <ResumeAnalyzerTab onAnalyze={handleAnalyzeResume} />
+            <ResumeAnalyzerTab onAnalyze={async (file) => apiService.analyzeResume(file)} />
           )}
           {activeTab === 'match' && (
-            <JobMatcherTab onMatch={handleMatchJob} />
+            <JobMatcherTab onMatch={async (jd) => apiService.matchJob(jd)} />
           )}
           {activeTab === 'analytics' && (
             <AnalyticsPage />
