@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from PyPDF2 import PdfReader
 from collections import Counter
-import re
 
 load_dotenv()
 
@@ -31,12 +30,26 @@ if not all([SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL]):
     raise ValueError("Missing environment variables. Check .env file")
 
 # ---------- Gemini Setup ----------
+genai = None
 if GEMINI_API_KEY:
-    import google.generativeai as genai
-    genai.configure(api_key=GEMINI_API_KEY)
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        print("✅ Gemini AI configured successfully")
+    except ImportError:
+        print("⚠️ google-generativeai not installed. Add to requirements.txt")
+    except Exception as e:
+        print(f"⚠️ Gemini setup failed: {e}")
 
 # ---------- Async SQLAlchemy ----------
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=True,
+    connect_args={
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    }
+)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
@@ -72,7 +85,7 @@ class JobDescriptionTable(Base):
     job_description = Column(Text)
     extracted_skills = Column(Text)  # JSON array
     extracted_keywords = Column(Text)
-    source_type = Column(String, default="community")  # "community" or "ai_estimate"
+    source_type = Column(String, default="community")
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -167,7 +180,7 @@ def calculate_match(resume_keywords: List[str], job_keywords: List[str]):
 
 async def extract_skills_with_gemini(text: str) -> List[str]:
     """Extract skills from resume or JD using Gemini"""
-    if not GEMINI_API_KEY:
+    if genai is None:
         return extract_keywords(text, top_n=15)
     
     try:
@@ -194,7 +207,7 @@ Output:"""
 
 async def get_company_skills_estimate(company: str, role: str) -> dict:
     """Get estimated skills for a company using Gemini (fallback when no JD exists)"""
-    if not GEMINI_API_KEY:
+    if genai is None:
         return {
             "skills": ["Data Structures & Algorithms", "Problem Solving", "System Design"],
             "sample_problems": ["LeetCode Top Interview Questions"],
@@ -344,7 +357,6 @@ async def analyze_resume(
     pdf = PdfReader(io.BytesIO(content))
     text = "".join(page.extract_text() or "" for page in pdf.pages)
     
-    # Use Gemini for skill extraction if available
     keywords = await extract_skills_with_gemini(text)
     ideal_skills = {"python", "react", "mongodb", "express", "nodejs", "git", "docker", "aws", "javascript", "typescript"}
     missing = [skill for skill in ideal_skills if skill not in [k.lower() for k in keywords]]
@@ -481,4 +493,3 @@ async def get_job_description_by_company_role(
         "resources": estimated_skills.get("resources", []),
         "message": "These skills are AI-estimated. Paste a real JD for accurate results."
     }
-# uvicorn main:app --reload --port 8000
