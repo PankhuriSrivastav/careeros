@@ -175,18 +175,29 @@ def calculate_match(resume_keywords: List[str], job_keywords: List[str]):
     return round(match_percent), list(missing)
 
 async def extract_skills_with_gemini(text: str) -> List[str]:
-    """Extract skills from resume or JD using Gemini (New SDK)"""
+    """Extract SPECIFIC technical skills from resume or JD using Gemini"""
     if genai_client is None:
         return extract_keywords(text, top_n=15)
     
     try:
         prompt = f"""
-Extract technical skills from the following text. 
+Extract SPECIFIC technical skills from the following text.
+Focus on concrete technologies, frameworks, languages, tools, and technical concepts.
 Return ONLY a JSON array of skill names, nothing else.
+
+Rules:
+- Include specific technologies (e.g., "React", "PostgreSQL", "Docker", NOT "Front-end technologies")
+- Include concrete concepts (e.g., "REST API Design", "Database Optimization", "CI/CD Pipelines")
+- DO NOT include soft skills like "Problem Solving", "Communication", "Teamwork", "Leadership"
+- DO NOT include vague terms like "System Design" unless specifically mentioned with technology context
+- DO NOT include generic terms like "Programming", "Coding", "Development"
+- Limit to 5-10 most important skills
+- Prefer specific tools/languages over general concepts
 
 Text: {text[:3000]}
 
-Example output: ["Python", "React", "System Design", "Docker", "AWS"]
+Example good output: ["React", "Node.js", "PostgreSQL", "REST API Design", "AWS", "Docker", "CI/CD", "TypeScript"]
+Example bad output: ["Problem Solving", "Communication", "Front-end technologies", "Backend Development"]
 
 Output:"""
         
@@ -197,6 +208,11 @@ Output:"""
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
             skills = json.loads(json_match.group())
+            # Filter out common soft skills just in case
+            soft_skills = {"problem solving", "communication", "teamwork", "leadership", 
+                          "critical thinking", "time management", "creativity", "adaptability",
+                          "work ethic", "attention to detail", "organization"}
+            skills = [s for s in skills if s.lower() not in soft_skills]
             return skills[:15]
         return extract_keywords(text, top_n=15)
     except Exception as e:
@@ -204,24 +220,34 @@ Output:"""
         return extract_keywords(text, top_n=15)
 
 async def get_company_skills_estimate(company: str, role: str) -> dict:
-    """Get estimated skills for a company using Gemini (New SDK, fallback when no JD exists)"""
+    """Get estimated skills for a company using Gemini (fallback when no JD exists)"""
     if genai_client is None:
         return {
-            "skills": ["Data Structures & Algorithms", "Problem Solving", "System Design"],
+            "skills": ["Python", "Java", "SQL", "Data Structures", "Algorithms"],
             "sample_problems": ["LeetCode Top Interview Questions"],
             "resources": ["LeetCode", "GeeksforGeeks"]
         }
     
     try:
         prompt = f"""
-What are the typical technical skills required for a {role} at {company}?
+What are the SPECIFIC technical skills typically required for a {role} at {company}?
+Focus on concrete technologies, programming languages, frameworks, and tools.
 Return ONLY a JSON object with this structure:
 {{
   "skills": ["skill1", "skill2", "skill3"],
   "sample_problems": ["problem1", "problem2"],
   "resources": ["resource1", "resource2"]
 }}
-Only include the most important 5-7 skills. Keep it concise.
+
+Rules:
+- Include specific technologies (e.g., "React", "Python", "AWS", NOT "Front-end")
+- Include concrete concepts (e.g., "Distributed Systems", "CI/CD", NOT "System Design")
+- DO NOT include soft skills
+- Keep it to 5-7 most important technical skills
+- Focus on what the company actually tests/requires in interviews
+
+Example for Google SWE: ["Python", "Java", "Data Structures", "Algorithms", "System Design", "Distributed Systems"]
+Example for Amazon SDE: ["Java", "AWS", "Microservices", "System Design", "Data Structures"]
 """
         response = genai_client.models.generate_content(
             model="gemini-2.0-flash",
@@ -229,12 +255,17 @@ Only include the most important 5-7 skills. Keep it concise.
         )
         json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group())
+            result = json.loads(json_match.group())
+            # Filter soft skills
+            soft_skills = {"problem solving", "communication", "teamwork", "leadership"}
+            if "skills" in result:
+                result["skills"] = [s for s in result["skills"] if s.lower() not in soft_skills]
+            return result
     except Exception as e:
         print(f"Gemini estimate error: {e}")
     
     return {
-        "skills": ["Data Structures & Algorithms", "Problem Solving", "System Design"],
+        "skills": ["Python", "Java", "SQL", "Data Structures", "Algorithms"],
         "sample_problems": ["LeetCode Top Interview Questions"],
         "resources": ["LeetCode", "GeeksforGeeks"]
     }
