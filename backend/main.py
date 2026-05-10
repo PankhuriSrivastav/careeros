@@ -98,6 +98,15 @@ class JobDescriptionTable(Base):
     times_used = Column(Integer, default=0)
     share_consent = Column(Boolean, default=False)
 
+class JDFeedbackTable(Base):
+    __tablename__ = "jd_feedback"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    jd_id = Column(String, nullable=True)
+    user_id = Column(String, nullable=True)
+    is_accurate = Column(Boolean, nullable=True)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

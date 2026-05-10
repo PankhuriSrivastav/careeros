@@ -12,3 +12,5 @@ httpx
 email-validator
 python-multipart
 google-genai
+alembic
+psycopg2-binary
