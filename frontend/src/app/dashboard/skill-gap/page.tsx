@@ -4,271 +4,91 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 import { 
-  Briefcase, 
-  TrendingUp, 
-  CheckCircle, 
-  AlertCircle, 
-  ExternalLink, 
-  Upload,
-  Loader2,
-  Target,
-  BookOpen
+  Briefcase, TrendingUp, CheckCircle, AlertCircle, 
+  ExternalLink, Upload, Loader2, Target, BookOpen, 
+  Clock, Calendar, FileText, X, ChevronDown
 } from 'lucide-react';
 
-interface CompanySkill {
-  skill: string;
-  priority: 'high' | 'medium' | 'low';
-  frequency: string;
-}
-
-interface CompanyData {
-  name: string;
-  tier: 'tier1' | 'tier2';
-  skills: CompanySkill[];
-  sampleProblems: { name: string; topic: string; difficulty: string; link: string }[];
-  resources: { name: string; url: string }[];
-}
-
-// Company database
-const COMPANY_DATABASE: CompanyData[] = [
-  {
-    name: 'Google',
-    tier: 'tier1',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '90% of interviews' },
-      { skill: 'System Design', priority: 'high', frequency: '75% of interviews' },
-      { skill: 'Dynamic Programming', priority: 'high', frequency: '65% of interviews' },
-      { skill: 'Python/Java', priority: 'high', frequency: '70% of interviews' },
-      { skill: 'Distributed Systems', priority: 'medium', frequency: '40% of interviews' },
-      { skill: 'Trees & Graphs', priority: 'medium', frequency: '50% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Longest Increasing Subsequence', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-increasing-subsequence' },
-      { name: 'Number of Islands', topic: 'Graph', difficulty: 'Medium', link: 'https://leetcode.com/problems/number-of-islands' },
-      { name: 'LRU Cache', topic: 'Design', difficulty: 'Medium', link: 'https://leetcode.com/problems/lru-cache' },
-    ],
-    resources: [
-      { name: 'LeetCode Google Tag', url: 'https://leetcode.com/tag/google' },
-      { name: 'GFG Google Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/google/' },
-    ],
-  },
-  {
-    name: 'Amazon',
-    tier: 'tier1',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '95% of interviews' },
-      { skill: 'System Design', priority: 'high', frequency: '70% of interviews' },
-      { skill: 'Leadership Principles', priority: 'high', frequency: '100% of interviews' },
-      { skill: 'Java', priority: 'high', frequency: '60% of interviews' },
-      { skill: 'AWS', priority: 'medium', frequency: '40% of interviews' },
-      { skill: 'Object Oriented Design', priority: 'medium', frequency: '35% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Two Sum', topic: 'Array', difficulty: 'Easy', link: 'https://leetcode.com/problems/two-sum' },
-      { name: 'Maximum Subarray', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/maximum-subarray' },
-      { name: 'Rotate Image', topic: 'Matrix', difficulty: 'Medium', link: 'https://leetcode.com/problems/rotate-image' },
-    ],
-    resources: [
-      { name: 'LeetCode Amazon Tag', url: 'https://leetcode.com/tag/amazon' },
-      { name: 'GFG Amazon Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/amazon/' },
-    ],
-  },
-  {
-    name: 'Microsoft',
-    tier: 'tier1',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '90% of interviews' },
-      { skill: 'System Design', priority: 'high', frequency: '60% of interviews' },
-      { skill: 'C#/.NET', priority: 'high', frequency: '50% of interviews' },
-      { skill: 'Problem Solving', priority: 'high', frequency: '85% of interviews' },
-      { skill: 'Azure', priority: 'medium', frequency: '30% of interviews' },
-      { skill: 'Operating Systems', priority: 'medium', frequency: '35% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Reverse Linked List', topic: 'Linked List', difficulty: 'Easy', link: 'https://leetcode.com/problems/reverse-linked-list' },
-      { name: 'Course Schedule', topic: 'Graph', difficulty: 'Medium', link: 'https://leetcode.com/problems/course-schedule' },
-      { name: 'Design Tic-Tac-Toe', topic: 'Design', difficulty: 'Medium', link: 'https://leetcode.com/problems/design-tic-tac-toe' },
-    ],
-    resources: [
-      { name: 'LeetCode Microsoft Tag', url: 'https://leetcode.com/tag/microsoft' },
-      { name: 'GFG Microsoft Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/microsoft/' },
-    ],
-  },
-  {
-    name: 'Meta',
-    tier: 'tier1',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '95% of interviews' },
-      { skill: 'System Design', priority: 'high', frequency: '80% of interviews' },
-      { skill: 'React', priority: 'high', frequency: '50% of interviews' },
-      { skill: 'JavaScript', priority: 'high', frequency: '60% of interviews' },
-      { skill: 'Product Sense', priority: 'medium', frequency: '40% of interviews' },
-      { skill: 'PHP/Hack', priority: 'low', frequency: '20% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Valid Parentheses', topic: 'Stack', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-parentheses' },
-      { name: 'Merge Intervals', topic: 'Array', difficulty: 'Medium', link: 'https://leetcode.com/problems/merge-intervals' },
-      { name: 'Lowest Common Ancestor', topic: 'Tree', difficulty: 'Medium', link: 'https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree' },
-    ],
-    resources: [
-      { name: 'LeetCode Meta Tag', url: 'https://leetcode.com/tag/facebook' },
-      { name: 'GFG Meta Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/facebook/' },
-    ],
-  },
-  {
-    name: 'Flipkart',
-    tier: 'tier2',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '85% of interviews' },
-      { skill: 'Java', priority: 'high', frequency: '60% of interviews' },
-      { skill: 'Spring Boot', priority: 'medium', frequency: '40% of interviews' },
-      { skill: 'System Design', priority: 'medium', frequency: '35% of interviews' },
-      { skill: 'Microservices', priority: 'medium', frequency: '30% of interviews' },
-      { skill: 'REST APIs', priority: 'medium', frequency: '40% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Max Sliding Window', topic: 'Queue', difficulty: 'Hard', link: 'https://leetcode.com/problems/sliding-window-maximum' },
-      { name: 'Clone Graph', topic: 'Graph', difficulty: 'Medium', link: 'https://leetcode.com/problems/clone-graph' },
-    ],
-    resources: [
-      { name: 'GFG Flipkart Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/flipkart/' },
-    ],
-  },
-  {
-    name: 'Zomato',
-    tier: 'tier2',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '80% of interviews' },
-      { skill: 'Python/JavaScript', priority: 'high', frequency: '70% of interviews' },
-      { skill: 'System Design', priority: 'medium', frequency: '30% of interviews' },
-      { skill: 'SQL', priority: 'medium', frequency: '40% of interviews' },
-      { skill: 'REST APIs', priority: 'medium', frequency: '45% of interviews' },
-      { skill: 'Node.js/React', priority: 'low', frequency: '25% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Find the Winner', topic: 'Array', difficulty: 'Medium', link: 'https://leetcode.com/problems/find-the-winner' },
-    ],
-    resources: [
-      { name: 'GFG Zomato Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/zomato/' },
-    ],
-  },
-  {
-    name: 'Razorpay',
-    tier: 'tier2',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '85% of interviews' },
-      { skill: 'Python', priority: 'high', frequency: '70% of interviews' },
-      { skill: 'System Design', priority: 'medium', frequency: '35% of interviews' },
-      { skill: 'Django/Flask', priority: 'medium', frequency: '30% of interviews' },
-      { skill: 'Fintech Domain', priority: 'low', frequency: '20% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Coin Change', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/coin-change' },
-    ],
-    resources: [
-      { name: 'GFG Razorpay Preparation', url: 'https://www.geeksforgeeks.org/company-preparation/razorpay/' },
-    ],
-  },
-  {
-    name: 'CRED',
-    tier: 'tier2',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '80% of interviews' },
-      { skill: 'Python/Go', priority: 'high', frequency: '60% of interviews' },
-      { skill: 'System Design', priority: 'high', frequency: '45% of interviews' },
-      { skill: 'Microservices', priority: 'medium', frequency: '30% of interviews' },
-      { skill: 'Fintech Domain', priority: 'medium', frequency: '25% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Design a Key-Value Store', topic: 'Design', difficulty: 'Hard', link: 'https://leetcode.com/problems/design-a-key-value-store' },
-    ],
-    resources: [
-      { name: 'LeetCode', url: 'https://leetcode.com' },
-    ],
-  },
-  {
-    name: 'PhonePe',
-    tier: 'tier2',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '85% of interviews' },
-      { skill: 'Java', priority: 'high', frequency: '65% of interviews' },
-      { skill: 'System Design', priority: 'medium', frequency: '30% of interviews' },
-      { skill: 'Fintech Domain', priority: 'low', frequency: '20% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Minimum Jumps', topic: 'DP', difficulty: 'Medium', link: 'https://leetcode.com/problems/jump-game-ii' },
-    ],
-    resources: [
-      { name: 'LeetCode', url: 'https://leetcode.com' },
-    ],
-  },
-  {
-    name: 'Swiggy',
-    tier: 'tier2',
-    skills: [
-      { skill: 'Data Structures & Algorithms', priority: 'high', frequency: '80% of interviews' },
-      { skill: 'System Design', priority: 'high', frequency: '40% of interviews' },
-      { skill: 'Python/Java', priority: 'high', frequency: '60% of interviews' },
-      { skill: 'Microservices', priority: 'medium', frequency: '30% of interviews' },
-    ],
-    sampleProblems: [
-      { name: 'Design Twitter Feed', topic: 'Design', difficulty: 'Medium', link: 'https://leetcode.com/problems/design-twitter' },
-    ],
-    resources: [
-      { name: 'LeetCode', url: 'https://leetcode.com' },
-    ],
-  },
+// Company list with roles
+const COMPANY_LIST = [
+  { name: 'Google', roles: ['Software Engineer', 'Data Scientist', 'DevOps Engineer'] },
+  { name: 'Amazon', roles: ['Software Engineer', 'Data Engineer', 'Frontend Engineer'] },
+  { name: 'Microsoft', roles: ['Software Engineer', 'Cloud Engineer', 'Product Manager'] },
+  { name: 'Meta', roles: ['Software Engineer', 'Data Scientist', 'Product Manager'] },
+  { name: 'Netflix', roles: ['Software Engineer', 'Data Engineer'] },
+  { name: 'Flipkart', roles: ['Software Engineer', 'Backend Engineer'] },
+  { name: 'Zomato', roles: ['Software Engineer', 'Data Analyst'] },
+  { name: 'Razorpay', roles: ['Software Engineer', 'Backend Engineer'] },
+  { name: 'CRED', roles: ['Software Engineer', 'Data Scientist'] },
+  { name: 'PhonePe', roles: ['Software Engineer', 'Security Engineer'] },
+  { name: 'Swiggy', roles: ['Software Engineer', 'Data Analyst'] },
 ];
 
+// Curated resources for core skills (fallback)
+const CORE_SKILL_RESOURCES: Record<string, { name: string; url: string }[]> = {
+  'Data Structures & Algorithms': [
+    { name: 'LeetCode', url: 'https://leetcode.com' },
+    { name: 'GeeksforGeeks', url: 'https://geeksforgeeks.org' },
+  ],
+  'System Design': [
+    { name: 'System Design Primer', url: 'https://github.com/donnemartin/system-design-primer' },
+    { name: 'Grokking System Design', url: 'https://www.youtube.com/c/GauravSen' },
+  ],
+  'Python': [
+    { name: 'Python Official Tutorial', url: 'https://docs.python.org/3/tutorial' },
+  ],
+  'AWS': [
+    { name: 'AWS Free Training', url: 'https://aws.amazon.com/training' },
+  ],
+  'Docker': [
+    { name: 'Docker Official Tutorial', url: 'https://docs.docker.com/get-started' },
+  ],
+  'SQL': [
+    { name: 'SQL Tutorial', url: 'https://w3schools.com/sql' },
+  ],
+};
+
+interface SelectedCompany {
+  name: string;
+  role: string;
+  jdData?: any;
+  isLoading: boolean;
+}
+
+interface SkillGap {
+  skill: string;
+  companies: string[];
+  priority: 'high' | 'medium' | 'low';
+  resources?: { name: string; url: string }[];
+}
+
 export default function SkillGapAnalyzerPage() {
-  const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [customCompany, setCustomCompany] = useState('');
-  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [selectedCompanies, setSelectedCompanies] = useState<SelectedCompany[]>([]);
   const [resumeSkills, setResumeSkills] = useState<string[]>([]);
-  const [showResumeUpload, setShowResumeUpload] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [hasResume, setHasResume] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [skillGaps, setSkillGaps] = useState<SkillGap[]>([]);
+  const [showAddCompany, setShowAddCompany] = useState(false);
+  const [customCompany, setCustomCompany] = useState('');
+  const [customRole, setCustomRole] = useState('');
+  const [showJDPaste, setShowJDPaste] = useState<string | null>(null);
+  const [jdText, setJdText] = useState('');
+  const [pastingJD, setPastingJD] = useState(false);
+  const [learningTimeline, setLearningTimeline] = useState<{ weeks: number; completionDate: string } | null>(null);
+  const [hoursPerDay, setHoursPerDay] = useState(1);
   const router = useRouter();
 
   useEffect(() => {
     if (!apiService.isAuthenticated()) {
       router.push('/login');
-    } else {
-      checkResumeExists();
+    }
+    // Load stored resume skills from localStorage or API
+    const storedSkills = localStorage.getItem('resumeSkills');
+    if (storedSkills) {
+      setResumeSkills(JSON.parse(storedSkills));
     }
   }, []);
-
-  const checkResumeExists = async () => {
-    try {
-      // Check if user has uploaded resume before
-      // For now, just check localStorage or a flag
-      // In production, fetch from API
-      setHasResume(false);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const filteredCompanies = COMPANY_DATABASE.filter(company =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      default: return 'bg-blue-100 text-blue-800 border-blue-200';
-    }
-  };
-
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case 'high': return '🔴';
-      case 'medium': return '🟡';
-      default: return '🔵';
-    }
-  };
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -279,8 +99,7 @@ export default function SkillGapAnalyzerPage() {
       const result = await apiService.analyzeResume(file);
       if (result && result.keywords) {
         setResumeSkills(result.keywords);
-        setShowResumeUpload(true);
-        setHasResume(true);
+        localStorage.setItem('resumeSkills', JSON.stringify(result.keywords));
       }
     } catch (error) {
       console.error('Error uploading resume:', error);
@@ -289,264 +108,511 @@ export default function SkillGapAnalyzerPage() {
     }
   };
 
-  const checkSkillMatch = (skill: string): 'has' | 'partial' | 'missing' => {
-    if (!resumeSkills.length) return 'missing';
-    const skillLower = skill.toLowerCase();
-    const hasExact = resumeSkills.some(s => s.toLowerCase() === skillLower);
-    if (hasExact) return 'has';
-    const hasPartial = resumeSkills.some(s => skillLower.includes(s.toLowerCase()) || s.toLowerCase().includes(skillLower));
-    return hasPartial ? 'partial' : 'missing';
+  const addCompany = async (companyName: string, role: string) => {
+    setShowAddCompany(false);
+    setCustomCompany('');
+    setCustomRole('');
+    
+    setSelectedCompanies(prev => [...prev, { name: companyName, role, isLoading: true }]);
+    
+    try {
+      // Fetch JD data from backend
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      
+      setSelectedCompanies(prev => prev.map(c => 
+        c.name === companyName && c.role === role ? { ...c, jdData: data, isLoading: false } : c
+      ));
+    } catch (error) {
+      console.error('Error fetching JD:', error);
+      setSelectedCompanies(prev => prev.map(c => 
+        c.name === companyName && c.role === role ? { ...c, isLoading: false } : c
+      ));
+    }
+  };
+
+  const removeCompany = (index: number) => {
+    setSelectedCompanies(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const pasteRealJD = async (companyName: string, role: string, jdText: string) => {
+    setPastingJD(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          company_name: companyName,
+          role: role,
+          job_description: jdText,
+          share_consent: true
+        })
+      });
+      const data = await response.json();
+      
+      // Refresh the company's data
+      const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const refreshData = await refreshResponse.json();
+      
+      setSelectedCompanies(prev => prev.map(c => 
+        c.name === companyName && c.role === role ? { ...c, jdData: refreshData, isLoading: false } : c
+      ));
+      setShowJDPaste(null);
+      setJdText('');
+    } catch (error) {
+      console.error('Error saving JD:', error);
+    } finally {
+      setPastingJD(false);
+    }
+  };
+
+  const analyzeGaps = async () => {
+    setAnalyzing(true);
+    
+    // Combine all required skills from selected companies
+    const requiredSkillsMap = new Map<string, { priority: 'high' | 'medium' | 'low'; companies: string[] }>();
+    
+    selectedCompanies.forEach(company => {
+      if (company.jdData?.extracted_skills) {
+        company.jdData.extracted_skills.forEach((skill: string) => {
+          const existing = requiredSkillsMap.get(skill);
+          if (existing) {
+            existing.companies.push(company.name);
+          } else {
+            requiredSkillsMap.set(skill, {
+              priority: company.jdData.source_type === 'community' ? 'high' : 'medium',
+              companies: [company.name]
+            });
+          }
+        });
+      }
+    });
+    
+    // Find gaps (skills not in resume)
+    const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
+    const gaps: SkillGap[] = [];
+    
+    requiredSkillsMap.forEach((value, skill) => {
+      const skillLower = skill.toLowerCase();
+      const hasSkill = resumeSkillsLower.some(rs => 
+        rs.includes(skillLower) || skillLower.includes(rs)
+      );
+      
+      if (!hasSkill) {
+        // Determine priority based on number of companies
+        let priority: 'high' | 'medium' | 'low' = 'low';
+        if (value.companies.length >= 3) priority = 'high';
+        else if (value.companies.length >= 2) priority = 'medium';
+        
+        // Get resources from core database or use default
+        const resources = CORE_SKILL_RESOURCES[skill] || [
+          { name: 'Google Search', url: `https://www.google.com/search?q=Learn+${encodeURIComponent(skill)}` }
+        ];
+        
+        gaps.push({
+          skill,
+          companies: value.companies,
+          priority,
+          resources
+        });
+      }
+    });
+    
+    // Sort by priority (high first)
+    gaps.sort((a, b) => {
+      const order = { high: 0, medium: 1, low: 2 };
+      return order[a.priority] - order[b.priority];
+    });
+    
+    setSkillGaps(gaps);
+    
+    // Calculate learning timeline
+    let totalWeeks = 0;
+    gaps.forEach(gap => {
+      if (gap.priority === 'high') totalWeeks += 3;
+      else if (gap.priority === 'medium') totalWeeks += 2;
+      else totalWeeks += 1;
+    });
+    
+    const completionDate = new Date();
+    completionDate.setDate(completionDate.getDate() + (totalWeeks * 7));
+    
+    setLearningTimeline({
+      weeks: totalWeeks,
+      completionDate: completionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    });
+    
+    setAnalyzing(false);
+  };
+
+  const getAgeBadge = (createdAt: string, ageDays: number) => {
+    if (ageDays < 7) {
+      return { emoji: '🟢', text: 'Fresh', color: 'text-green-600', bg: 'bg-green-50', message: 'Added recently – likely accurate' };
+    } else if (ageDays < 30) {
+      return { emoji: '🟡', text: `${ageDays} days ago`, color: 'text-yellow-600', bg: 'bg-yellow-50', message: 'Added within a month' };
+    } else if (ageDays < 90) {
+      return { emoji: '🟠', text: `${Math.floor(ageDays / 30)} months ago`, color: 'text-orange-600', bg: 'bg-orange-50', message: 'May be stale – verify requirements' };
+    } else if (ageDays < 180) {
+      return { emoji: '🔴', text: `${Math.floor(ageDays / 30)} months ago`, color: 'text-red-600', bg: 'bg-red-50', message: 'Likely outdated – add new version' };
+    } else {
+      return { emoji: '⚫', text: 'Archived', color: 'text-gray-500', bg: 'bg-gray-100', message: 'Archived – add new version' };
+    }
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'high': return { emoji: '🔴', text: 'High Priority', color: 'text-red-600', bg: 'bg-red-50' };
+      case 'medium': return { emoji: '🟡', text: 'Medium Priority', color: 'text-yellow-600', bg: 'bg-yellow-50' };
+      default: return { emoji: '🔵', text: 'Low Priority', color: 'text-blue-600', bg: 'bg-blue-50' };
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Skill Gap Analyzer</h1>
           <p className="text-gray-600">
-            Select a company to see what skills you need to prepare
+            Select target companies and roles to see what skills you're missing
           </p>
         </div>
 
-        {/* Resume Upload Banner */}
-        {!hasResume && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex items-center gap-4 flex-wrap md:flex-nowrap">
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold mb-1">Upload Your Resume</h2>
-                <p className="text-gray-600 text-sm">
-                  Get personalized insights on which skills you already have
-                </p>
-              </div>
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleResumeUpload}
-                  className="hidden"
-                  disabled={uploading}
-                />
-                <div className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
-                  {uploading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  {uploading ? 'Uploading...' : 'Upload Resume'}
-                </div>
-              </label>
-            </div>
-          </div>
-        )}
-
-        {/* Company Selection */}
+        {/* Resume Upload */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Target className="w-5 h-5 text-blue-600" />
-              Select a Company
-            </h2>
-            <button
-              onClick={() => setShowCustomInput(!showCustomInput)}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              {showCustomInput ? 'Browse companies' : '+ Add custom company'}
-            </button>
-          </div>
-
-          {showCustomInput ? (
-            <div>
-              <input
-                type="text"
-                placeholder="Enter company name..."
-                value={customCompany}
-                onChange={(e) => setCustomCompany(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              {customCompany && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-gray-600">
-                    For {customCompany}, we recommend preparing:
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    <li>• Data Structures & Algorithms</li>
-                    <li>• System Design basics</li>
-                    <li>• Problem Solving</li>
-                  </ul>
-                  <p className="text-xs text-gray-500 mt-2">
-                    *Custom company data is generalized. For specific questions, check Glassdoor.
-                  </p>
+          <div className="flex items-center gap-4 flex-wrap md:flex-nowrap">
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold mb-1">Your Resume</h2>
+              <p className="text-gray-600 text-sm">
+                {resumeSkills.length > 0 
+                  ? `✅ ${resumeSkills.length} skills detected` 
+                  : "Upload to see personalized skill gaps"}
+              </p>
+              {resumeSkills.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {resumeSkills.slice(0, 5).map((skill, idx) => (
+                    <span key={idx} className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full">
+                      {skill}
+                    </span>
+                  ))}
+                  {resumeSkills.length > 5 && (
+                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                      +{resumeSkills.length - 5} more
+                    </span>
+                  )}
                 </div>
               )}
             </div>
-          ) : (
-            <>
+            <label className="cursor-pointer">
               <input
-                type="text"
-                placeholder="Search companies..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500"
+                type="file"
+                accept=".pdf"
+                onChange={handleResumeUpload}
+                className="hidden"
+                disabled={uploading}
               />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
-                {filteredCompanies.map((company) => (
-                  <button
-                    key={company.name}
-                    onClick={() => setSelectedCompany(company)}
-                    className={`px-3 py-2 rounded-lg border transition text-sm ${
-                      selectedCompany?.name === company.name
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
-                    }`}
-                  >
-                    {company.name}
-                  </button>
-                ))}
+              <div className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploading ? 'Uploading...' : resumeSkills.length > 0 ? 'Update Resume' : 'Upload Resume'}
               </div>
-            </>
-          )}
+            </label>
+          </div>
         </div>
 
-        {/* Company Details */}
-        {selectedCompany && !showCustomInput && (
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
-              <h2 className="text-xl font-bold text-white">{selectedCompany.name}</h2>
-              <p className="text-blue-100 text-sm mt-1">
-                {selectedCompany.tier === 'tier1' ? '🏆 Top Tier Company' : '📈 Product Based Company'}
-              </p>
-            </div>
-
-            {/* Skills Section */}
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-purple-600" />
-                Skills to Prepare
-              </h3>
-              <div className="space-y-3">
-                {selectedCompany.skills.map((skill, idx) => {
-                  const matchStatus = checkSkillMatch(skill.skill);
-                  return (
-                    <div key={idx} className={`border rounded-lg p-3 ${getPriorityColor(skill.priority)}`}>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{getPriorityIcon(skill.priority)}</span>
-                            <span className="font-semibold">{skill.skill}</span>
-                            <span className="text-xs opacity-75">{skill.frequency}</span>
-                          </div>
-                          <p className="text-xs opacity-75">
-                            {skill.priority === 'high' ? 'Must know' : skill.priority === 'medium' ? 'Important' : 'Nice to have'}
-                          </p>
-                        </div>
-                        {resumeSkills.length > 0 && (
-                          <div className="ml-4">
-                            {matchStatus === 'has' && (
-                              <span className="text-green-600 flex items-center gap-1 text-sm">
-                                <CheckCircle className="w-4 h-4" /> You have this
-                              </span>
-                            )}
-                            {matchStatus === 'partial' && (
-                              <span className="text-yellow-600 text-sm">⚠️ Partially matched</span>
-                            )}
-                            {matchStatus === 'missing' && (
-                              <span className="text-gray-500 text-sm">❌ Not detected</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Sample Problems */}
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-green-600" />
-                Sample Problems
-              </h3>
-              <div className="grid gap-3">
-                {selectedCompany.sampleProblems.map((problem, idx) => (
-                  <a
-                    key={idx}
-                    href={problem.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
-                  >
+        {/* Selected Companies */}
+        {selectedCompanies.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Target className="w-5 h-5 text-blue-600" />
+              Selected Companies ({selectedCompanies.length})
+            </h2>
+            <div className="space-y-4">
+              {selectedCompanies.map((company, idx) => (
+                <div key={idx} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <span className="font-medium">{problem.name}</span>
-                      <div className="flex gap-2 mt-1">
-                        <span className="text-xs px-2 py-0.5 bg-gray-200 rounded">{problem.topic}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          problem.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
-                          problem.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {problem.difficulty}
-                        </span>
-                      </div>
+                      <h3 className="font-semibold">{company.name}</h3>
+                      <p className="text-sm text-gray-600">{company.role}</p>
                     </div>
-                    <ExternalLink className="w-4 h-4 text-gray-400" />
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Resources */}
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-orange-600" />
-                Free Resources
-              </h3>
-              <div className="flex flex-wrap gap-3">
-                {selectedCompany.resources.map((resource, idx) => (
-                  <a
-                    key={idx}
-                    href={resource.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
-                  >
-                    {resource.name}
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Summary */}
-            {resumeSkills.length > 0 && (
-              <div className="p-6 bg-green-50 border-t">
-                <h3 className="font-semibold mb-2">📊 Your Preparation Status</h3>
-                <p className="text-sm text-gray-700">
-                  Based on your resume, you have {selectedCompany.skills.filter(s => checkSkillMatch(s.skill) === 'has').length} out of {selectedCompany.skills.length} key skills.
-                </p>
-                <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-green-600 h-2 rounded-full transition-all"
-                    style={{ width: `${(selectedCompany.skills.filter(s => checkSkillMatch(s.skill) === 'has').length / selectedCompany.skills.length) * 100}%` }}
-                  />
+                    <button onClick={() => removeCompany(idx)} className="text-red-500 hover:text-red-700">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  {company.isLoading ? (
+                    <div className="flex items-center gap-2 mt-3 text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Loading requirements...</span>
+                    </div>
+                  ) : company.jdData ? (
+                    <div className="mt-3">
+                      {/* Source badge */}
+                      {company.jdData.source_type === 'community' ? (
+                        <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${getAgeBadge(company.jdData.created_at, company.jdData.age_days).bg} ${getAgeBadge(company.jdData.created_at, company.jdData.age_days).color} mb-2`}>
+                          <span>{getAgeBadge(company.jdData.created_at, company.jdData.age_days).emoji}</span>
+                          <span>{getAgeBadge(company.jdData.created_at, company.jdData.age_days).text}</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-orange-50 text-orange-600 mb-2">
+                          <span>🤖</span>
+                          <span>AI-Estimated</span>
+                        </div>
+                      )}
+                      
+                      {/* Skills */}
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {company.jdData.extracted_skills?.slice(0, 8).map((skill: string, sidx: number) => (
+                          <span key={sidx} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                      
+                      {/* AI estimate warning banner */}
+                      {company.jdData.source_type === 'ai_estimate' && (
+                        <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-xs text-orange-700">
+                                These skills are AI-estimated, not from a real {company.name} JD.
+                              </p>
+                              <button
+                                onClick={() => setShowJDPaste(`${company.name}|${company.role}`)}
+                                className="text-xs text-orange-600 hover:underline mt-1"
+                              >
+                                → Paste real JD for accurate results
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* JD Paste Form */}
+                      {showJDPaste === `${company.name}|${company.role}` && (
+                        <div className="mt-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                          <textarea
+                            value={jdText}
+                            onChange={(e) => setJdText(e.target.value)}
+                            placeholder="Paste the job description here..."
+                            className="w-full p-2 border border-gray-300 rounded-lg text-sm h-32"
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => pasteRealJD(company.name, company.role, jdText)}
+                              disabled={pastingJD || !jdText.trim()}
+                              className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                              {pastingJD ? 'Saving...' : 'Save JD'}
+                            </button>
+                            <button
+                              onClick={() => setShowJDPaste(null)}
+                              className="px-3 py-1 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-red-500 mt-2">Failed to load requirements</p>
+                  )}
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Keep learning the missing skills to improve your chances!
-                </p>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         )}
 
-        {/* No selection state */}
-        {!selectedCompany && !showCustomInput && (
-          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+        {/* Add Company Button */}
+        {!showAddCompany ? (
+          <button
+            onClick={() => setShowAddCompany(true)}
+            className="w-full bg-white border-2 border-dashed border-gray-300 rounded-xl p-4 text-gray-500 hover:border-blue-400 hover:text-blue-500 transition mb-8"
+          >
+            + Add Company
+          </button>
+        ) : (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 className="text-lg font-semibold mb-4">Add Company</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <select
+                value={customCompany}
+                onChange={(e) => setCustomCompany(e.target.value)}
+                className="p-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Select Company</option>
+                {COMPANY_LIST.map(c => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              <select
+                value={customRole}
+                onChange={(e) => setCustomRole(e.target.value)}
+                className="p-2 border border-gray-300 rounded-lg"
+                disabled={!customCompany}
+              >
+                <option value="">Select Role</option>
+                {customCompany && COMPANY_LIST.find(c => c.name === customCompany)?.roles.map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => customCompany && customRole && addCompany(customCompany, customRole)}
+                disabled={!customCompany || !customRole}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => setShowAddCompany(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Analyze Button */}
+        {selectedCompanies.length > 0 && resumeSkills.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <label className="text-sm text-gray-600">Study hours/day:</label>
+                <input
+                  type="number"
+                  min="0.5"
+                  max="8"
+                  step="0.5"
+                  value={hoursPerDay}
+                  onChange={(e) => setHoursPerDay(parseFloat(e.target.value))}
+                  className="w-20 p-2 border border-gray-300 rounded-lg text-center"
+                />
+                <span className="text-sm text-gray-500">hours</span>
+              </div>
+              <button
+                onClick={analyzeGaps}
+                disabled={analyzing}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
+              >
+                {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                {analyzing ? 'Analyzing...' : 'Analyze Skill Gaps'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Learning Timeline */}
+        {learningTimeline && (
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl shadow-lg p-6 mb-8 border border-purple-200">
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              Your Learning Timeline
+            </h2>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <p className="text-2xl font-bold text-purple-700">{learningTimeline.weeks} weeks</p>
+                <p className="text-sm text-gray-600">at {hoursPerDay} hour/day</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Estimated completion</p>
+                <p className="text-lg font-semibold">{learningTimeline.completionDate}</p>
+              </div>
+            </div>
+            <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-purple-600 h-2 rounded-full" style={{ width: '30%' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Skill Gaps Results */}
+        {skillGaps.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-purple-600" />
+              Skills to Learn
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Based on your selected companies, here's what you need to learn:
+            </p>
+            
+            <div className="space-y-4">
+              {skillGaps.map((gap, idx) => {
+                const priorityBadge = getPriorityBadge(gap.priority);
+                return (
+                  <div key={idx} className={`border rounded-lg p-4 ${priorityBadge.bg}`}>
+                    <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{priorityBadge.emoji}</span>
+                        <h3 className="font-semibold">{gap.skill}</h3>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${priorityBadge.bg} ${priorityBadge.color}`}>
+                          {priorityBadge.text}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Affects: {gap.companies.join(', ')}
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {gap.resources?.map((resource, ridx) => (
+                        <a
+                          key={ridx}
+                          href={resource.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-white rounded-full text-xs hover:shadow transition"
+                        >
+                          {resource.name}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="mt-6 p-4 bg-green-50 rounded-lg">
+              <h3 className="font-semibold mb-2">💡 Next Steps</h3>
+              <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                <li>Start with High Priority skills (they affect the most companies)</li>
+                <li>For AI-estimated companies, paste real JDs for accurate results</li>
+                <li>Use the free resources provided above</li>
+                <li>Update your resume after learning new skills and re-analyze</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* No resume warning */}
+        {selectedCompanies.length > 0 && resumeSkills.length === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+            <h2 className="text-xl font-semibold mb-2">Upload Your Resume First</h2>
+            <p className="text-gray-600">
+              Upload your resume above to see personalized skill gap analysis.
+            </p>
+          </div>
+        )}
+
+        {/* No companies warning */}
+        {selectedCompanies.length === 0 && (
+          <div className="bg-gray-50 rounded-xl p-12 text-center border border-gray-200">
             <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">No Company Selected</h2>
+            <h2 className="text-xl font-semibold mb-2">No Companies Selected</h2>
             <p className="text-gray-500">
-              Select a company from the list above to see their skill requirements
+              Click "Add Company" to start analyzing skill gaps.
             </p>
           </div>
         )}
