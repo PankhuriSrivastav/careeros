@@ -104,11 +104,7 @@ app = FastAPI(title="CareerOS API")
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://careeros-ny7q.vercel.app",
-        "https://careeros-7vwa.vercel.app",
-    ],
+    allow_origins=["*"],  # Allow all origins for now (change back later)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -493,3 +489,4 @@ async def get_job_description_by_company_role(
         "resources": estimated_skills.get("resources", []),
         "message": "These skills are AI-estimated. Paste a real JD for accurate results."
     }
+# uvicorn main:app --reload --port 8000
