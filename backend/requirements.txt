@@ -11,4 +11,4 @@ PyPDF2
 httpx
 email-validator
 python-multipart
-google-generativeai
+google-genai

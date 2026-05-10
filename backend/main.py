@@ -29,15 +29,15 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not all([SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL]):
     raise ValueError("Missing environment variables. Check .env file")
 
-# ---------- Gemini Setup ----------
-genai = None
+# ---------- Gemini Setup (New SDK) ----------
+genai_client = None
 if GEMINI_API_KEY:
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
+        from google import genai
+        genai_client = genai.Client(api_key=GEMINI_API_KEY)
         print("✅ Gemini AI configured successfully")
     except ImportError:
-        print("⚠️ google-generativeai not installed. Add to requirements.txt")
+        print("⚠️ google-genai not installed. Add to requirements.txt")
     except Exception as e:
         print(f"⚠️ Gemini setup failed: {e}")
 
@@ -83,7 +83,7 @@ class JobDescriptionTable(Base):
     company_name = Column(String, index=True)
     role = Column(String)
     job_description = Column(Text)
-    extracted_skills = Column(Text)  # JSON array
+    extracted_skills = Column(Text)
     extracted_keywords = Column(Text)
     source_type = Column(String, default="community")
     is_verified = Column(Boolean, default=False)
@@ -104,7 +104,7 @@ app = FastAPI(title="CareerOS API")
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now (change back later)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -175,12 +175,11 @@ def calculate_match(resume_keywords: List[str], job_keywords: List[str]):
     return round(match_percent), list(missing)
 
 async def extract_skills_with_gemini(text: str) -> List[str]:
-    """Extract skills from resume or JD using Gemini"""
-    if genai is None:
+    """Extract skills from resume or JD using Gemini (New SDK)"""
+    if genai_client is None:
         return extract_keywords(text, top_n=15)
     
     try:
-        model = genai.GenerativeModel('gemini-pro')
         prompt = f"""
 Extract technical skills from the following text. 
 Return ONLY a JSON array of skill names, nothing else.
@@ -191,7 +190,10 @@ Example output: ["Python", "React", "System Design", "Docker", "AWS"]
 
 Output:"""
         
-        response = model.generate_content(prompt)
+        response = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
             skills = json.loads(json_match.group())
@@ -202,8 +204,8 @@ Output:"""
         return extract_keywords(text, top_n=15)
 
 async def get_company_skills_estimate(company: str, role: str) -> dict:
-    """Get estimated skills for a company using Gemini (fallback when no JD exists)"""
-    if genai is None:
+    """Get estimated skills for a company using Gemini (New SDK, fallback when no JD exists)"""
+    if genai_client is None:
         return {
             "skills": ["Data Structures & Algorithms", "Problem Solving", "System Design"],
             "sample_problems": ["LeetCode Top Interview Questions"],
@@ -211,7 +213,6 @@ async def get_company_skills_estimate(company: str, role: str) -> dict:
         }
     
     try:
-        model = genai.GenerativeModel('gemini-pro')
         prompt = f"""
 What are the typical technical skills required for a {role} at {company}?
 Return ONLY a JSON object with this structure:
@@ -222,7 +223,10 @@ Return ONLY a JSON object with this structure:
 }}
 Only include the most important 5-7 skills. Keep it concise.
 """
-        response = model.generate_content(prompt)
+        response = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
@@ -419,7 +423,6 @@ async def create_job_description(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Extract skills using Gemini
     extracted_skills = await extract_skills_with_gemini(jd_data.job_description)
     
     new_jd = JobDescriptionTable(
@@ -449,7 +452,6 @@ async def get_job_description_by_company_role(
     role: str,
     db: AsyncSession = Depends(get_db)
 ):
-    # Look for community JD first (within 6 months)
     six_months_ago = datetime.utcnow() - timedelta(days=180)
     
     stmt = select(JobDescriptionTable).where(
@@ -478,7 +480,6 @@ async def get_job_description_by_company_role(
             "job_description": community_jd.job_description
         }
     
-    # No community JD, use Gemini estimate
     estimated_skills = await get_company_skills_estimate(company, role)
     
     return {
