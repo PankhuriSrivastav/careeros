@@ -258,6 +258,40 @@ export default function SkillGapAnalyzerPage() {
   const analyzeGaps = async () => {
     setAnalyzing(true);
     
+    // ✅ Auto-save any unsaved JD before analyzing
+    if (showJDPaste && jdText.trim()) {
+      const [companyName, role] = showJDPaste.split('|');
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            company_name: companyName,
+            role: role,
+            job_description: jdText,
+            share_consent: true
+          })
+        });
+        
+        // Refresh JD data
+        const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const refreshData = await refreshResponse.json();
+        
+        setSelectedCompanies(prev => prev.map(c => 
+          c.name === companyName && c.role === role ? { ...c, jdData: refreshData } : c
+        ));
+        setShowJDPaste(null);
+        setJdText('');
+      } catch (error) {
+        console.error('Auto-save JD failed:', error);
+      }
+    }
+    
     const requiredSkillsMap = new Map<string, { companies: string[]; sourceType: string }>();
     
     selectedCompanies.forEach(company => {
