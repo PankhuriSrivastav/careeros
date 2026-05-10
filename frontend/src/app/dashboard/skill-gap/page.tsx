@@ -111,6 +111,7 @@ export default function SkillGapAnalyzerPage() {
   const [pastingJD, setPastingJD] = useState(false);
   const [learningTimeline, setLearningTimeline] = useState<{ weeks: number; completionDate: string } | null>(null);
   const [hoursPerDay, setHoursPerDay] = useState(1);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const companyDropdownRef = useRef<HTMLDivElement>(null);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
@@ -123,10 +124,24 @@ export default function SkillGapAnalyzerPage() {
     r.toLowerCase().includes(roleInput.toLowerCase())
   );
 
+  // Load saved data on mount
   useEffect(() => {
     const storedSkills = localStorage.getItem('resumeSkills');
     if (storedSkills) {
       setResumeSkills(JSON.parse(storedSkills));
+    }
+    
+    const storedCompanies = localStorage.getItem('selectedCompanies');
+    if (storedCompanies) {
+      const companies = JSON.parse(storedCompanies);
+      setTimeout(() => {
+        companies.forEach((company: { name: string; role: string }) => {
+          addCompany(company.name, company.role);
+        });
+        setInitialLoadDone(true);
+      }, 100);
+    } else {
+      setInitialLoadDone(true);
     }
   }, []);
 
@@ -142,6 +157,15 @@ export default function SkillGapAnalyzerPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Save companies to localStorage whenever they change
+  useEffect(() => {
+    if (initialLoadDone && selectedCompanies.length > 0) {
+      localStorage.setItem('selectedCompanies', JSON.stringify(
+        selectedCompanies.map(c => ({ name: c.name, role: c.role }))
+      ));
+    }
+  }, [selectedCompanies, initialLoadDone]);
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -188,7 +212,13 @@ export default function SkillGapAnalyzerPage() {
   };
 
   const removeCompany = (index: number) => {
-    setSelectedCompanies(prev => prev.filter((_, i) => i !== index));
+    setSelectedCompanies(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      if (updated.length === 0) {
+        localStorage.removeItem('selectedCompanies');
+      }
+      return updated;
+    });
   };
 
   const pasteRealJD = async (companyName: string, role: string, jdText: string) => {
