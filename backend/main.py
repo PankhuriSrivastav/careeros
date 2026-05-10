@@ -10,7 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from sqlalchemy import Column, String, DateTime, Text, desc, Boolean, Integer
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.sql import select, and_
@@ -58,11 +58,11 @@ engine = create_async_engine(
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
-# ---------- Models (UUID columns matching your database) ----------
+# ---------- Models (UUID + Array columns) ----------
 class ApplicationTable(Base):
     __tablename__ = "applications"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, index=True)  # Supabase Auth user IDs are strings (varchar)
+    user_id = Column(String, index=True)
     company = Column(String)
     role = Column(String)
     status = Column(String)
@@ -70,7 +70,7 @@ class ApplicationTable(Base):
     salary = Column(String, nullable=True)
     notes = Column(String, nullable=True)
     job_description = Column(Text, nullable=True)
-    jd_id = Column(UUID(as_uuid=True), nullable=True)  # FK referencing job_descriptions (UUID)
+    jd_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -79,7 +79,7 @@ class UserResumeTable(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, index=True)
     resume_text = Column(Text)
-    keywords = Column(Text)
+    keywords = Column(Text)  # comma-separated string (kept as is)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class JobDescriptionTable(Base):
@@ -88,14 +88,15 @@ class JobDescriptionTable(Base):
     company_name = Column(String, index=True)
     role = Column(String)
     job_description = Column(Text)
-    extracted_skills = Column(Text)
-    extracted_keywords = Column(Text)
+    # These are now PostgreSQL arrays, not plain strings
+    extracted_skills = Column(ARRAY(Text))
+    extracted_keywords = Column(ARRAY(Text))
     source_type = Column(String, default="community")
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    added_by_user_id = Column(String)  # Supabase user ID is a string
+    added_by_user_id = Column(String)
     times_used = Column(Integer, default=0)
     share_consent = Column(Boolean, default=False)
 
@@ -116,13 +117,11 @@ async def init_db():
 app = FastAPI(title="CareerOS API")
 
 # Custom JSON serialization for UUID objects
-import uuid as uuid_module
 def custom_json_serializer(obj):
-    if isinstance(obj, uuid_module.UUID):
+    if isinstance(obj, uuid.UUID):
         return str(obj)
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
-# Override default JSON encoder
 from fastapi.responses import JSONResponse
 import json as json_module
 
@@ -135,7 +134,6 @@ class CustomJSONResponse(JSONResponse):
             indent=None,
         ).encode("utf-8")
 
-# Set as default response class
 app.default_response_class = CustomJSONResponse
 
 # CORS Configuration
@@ -350,7 +348,7 @@ async def create_application(
     db: AsyncSession = Depends(get_db)
 ):
     app_dict = app_data.dict()
-    app_dict["id"] = uuid.uuid4()  # Now returns UUID object
+    app_dict["id"] = uuid.uuid4()
     app_dict["user_id"] = current_user["sub"]
     stmt = ApplicationTable.__table__.insert().values(**app_dict)
     await db.execute(stmt)
@@ -503,8 +501,8 @@ async def create_job_description(
         company_name=jd_data.company_name,
         role=jd_data.role,
         job_description=jd_data.job_description,
-        extracted_skills=json.dumps(extracted_skills),
-        extracted_keywords=",".join(extracted_skills),
+        extracted_skills=extracted_skills,          # stored as list directly
+        extracted_keywords=extracted_skills,        # stored as list directly (array)
         source_type="community",
         added_by_user_id=current_user["sub"],
         share_consent=jd_data.share_consent
@@ -547,7 +545,7 @@ async def get_job_description_by_company_role(
             "exists": True,
             "source_type": "community",
             "id": str(community_jd.id),
-            "extracted_skills": json.loads(community_jd.extracted_skills),
+            "extracted_skills": community_jd.extracted_skills,  # already a list
             "created_at": community_jd.created_at.isoformat(),
             "age_days": age_days,
             "is_fresh": age_days < 30,
