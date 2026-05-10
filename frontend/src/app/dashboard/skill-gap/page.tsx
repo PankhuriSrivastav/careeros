@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 import { 
   Briefcase, TrendingUp, CheckCircle, AlertCircle, 
   ExternalLink, Upload, Loader2, Target, BookOpen, 
-  Clock, Calendar, FileText, X, ChevronDown
+  Clock, Calendar, FileText, X, ChevronDown, Search, Plus
 } from 'lucide-react';
 
 // Company list with roles
@@ -23,6 +23,12 @@ const COMPANY_LIST = [
   { name: 'PhonePe', roles: ['Software Engineer', 'Security Engineer'] },
   { name: 'Swiggy', roles: ['Software Engineer', 'Data Analyst'] },
 ];
+
+// All unique company names for search
+const ALL_COMPANIES = COMPANY_LIST.map(c => c.name);
+
+// All unique roles across companies
+const ALL_ROLES = [...new Set(COMPANY_LIST.flatMap(c => c.roles))];
 
 // Curated resources for core skills (fallback)
 const CORE_SKILL_RESOURCES: Record<string, { name: string; url: string }[]> = {
@@ -70,8 +76,10 @@ export default function SkillGapAnalyzerPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [skillGaps, setSkillGaps] = useState<SkillGap[]>([]);
   const [showAddCompany, setShowAddCompany] = useState(false);
-  const [customCompany, setCustomCompany] = useState('');
-  const [customRole, setCustomRole] = useState('');
+  const [companyInput, setCompanyInput] = useState('');
+  const [roleInput, setRoleInput] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showJDPaste, setShowJDPaste] = useState<string | null>(null);
   const [jdText, setJdText] = useState('');
   const [pastingJD, setPastingJD] = useState(false);
@@ -79,15 +87,40 @@ export default function SkillGapAnalyzerPage() {
   const [hoursPerDay, setHoursPerDay] = useState(1);
   const router = useRouter();
 
+  const companyDropdownRef = useRef<HTMLDivElement>(null);
+  const roleDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filtered lists based on input
+  const filteredCompanies = ALL_COMPANIES.filter(c =>
+    c.toLowerCase().includes(companyInput.toLowerCase())
+  );
+
+  const filteredRoles = ALL_ROLES.filter(r =>
+    r.toLowerCase().includes(roleInput.toLowerCase())
+  );
+
   useEffect(() => {
     if (!apiService.isAuthenticated()) {
       router.push('/login');
     }
-    // Load stored resume skills from localStorage or API
     const storedSkills = localStorage.getItem('resumeSkills');
     if (storedSkills) {
       setResumeSkills(JSON.parse(storedSkills));
     }
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (companyDropdownRef.current && !companyDropdownRef.current.contains(e.target as Node)) {
+        setShowCompanyDropdown(false);
+      }
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(e.target as Node)) {
+        setShowRoleDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,14 +142,17 @@ export default function SkillGapAnalyzerPage() {
   };
 
   const addCompany = async (companyName: string, role: string) => {
+    if (selectedCompanies.find(c => c.name === companyName && c.role === role)) {
+      return; // Already added
+    }
+
     setShowAddCompany(false);
-    setCustomCompany('');
-    setCustomRole('');
+    setCompanyInput('');
+    setRoleInput('');
     
     setSelectedCompanies(prev => [...prev, { name: companyName, role, isLoading: true }]);
     
     try {
-      // Fetch JD data from backend
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
@@ -153,9 +189,7 @@ export default function SkillGapAnalyzerPage() {
           share_consent: true
         })
       });
-      const data = await response.json();
       
-      // Refresh the company's data
       const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
@@ -176,7 +210,6 @@ export default function SkillGapAnalyzerPage() {
   const analyzeGaps = async () => {
     setAnalyzing(true);
     
-    // Combine all required skills from selected companies
     const requiredSkillsMap = new Map<string, { priority: 'high' | 'medium' | 'low'; companies: string[] }>();
     
     selectedCompanies.forEach(company => {
@@ -195,7 +228,6 @@ export default function SkillGapAnalyzerPage() {
       }
     });
     
-    // Find gaps (skills not in resume)
     const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
     const gaps: SkillGap[] = [];
     
@@ -206,14 +238,12 @@ export default function SkillGapAnalyzerPage() {
       );
       
       if (!hasSkill) {
-        // Determine priority based on number of companies
         let priority: 'high' | 'medium' | 'low' = 'low';
         if (value.companies.length >= 3) priority = 'high';
         else if (value.companies.length >= 2) priority = 'medium';
         
-        // Get resources from core database or use default
         const resources = CORE_SKILL_RESOURCES[skill] || [
-          { name: 'Google Search', url: `https://www.google.com/search?q=Learn+${encodeURIComponent(skill)}` }
+          { name: 'Search Resources', url: `https://www.google.com/search?q=Learn+${encodeURIComponent(skill)}` }
         ];
         
         gaps.push({
@@ -225,7 +255,6 @@ export default function SkillGapAnalyzerPage() {
       }
     });
     
-    // Sort by priority (high first)
     gaps.sort((a, b) => {
       const order = { high: 0, medium: 1, low: 2 };
       return order[a.priority] - order[b.priority];
@@ -233,7 +262,6 @@ export default function SkillGapAnalyzerPage() {
     
     setSkillGaps(gaps);
     
-    // Calculate learning timeline
     let totalWeeks = 0;
     gaps.forEach(gap => {
       if (gap.priority === 'high') totalWeeks += 3;
@@ -395,30 +423,70 @@ export default function SkillGapAnalyzerPage() {
                         </div>
                       )}
                       
-                      {/* JD Paste Form */}
+                      {/* JD Paste Form with Explanation */}
                       {showJDPaste === `${company.name}|${company.role}` && (
-                        <div className="mt-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="mt-3 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                          {/* Helpful hint box */}
+                          <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-start gap-2">
+                              <FileText className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-blue-800">What is a Job Description (JD)?</p>
+                                <p className="text-xs text-blue-700 mt-1">
+                                  A JD includes <strong>job responsibilities</strong> (what you'll do) and <strong>job requirements</strong> (skills, experience, education needed).
+                                </p>
+                                <p className="text-xs text-blue-700 mt-1">
+                                  📋 <strong>Example:</strong> "We are looking for a Software Engineer with 3+ years experience in Python, AWS, and System Design. You will be responsible for building scalable APIs..."
+                                </p>
+                                <p className="text-xs text-blue-700 mt-1">
+                                  💡 <strong>Tip:</strong> Copy the entire job posting from LinkedIn, company careers page, or any job portal and paste it below.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Paste the full job description below
+                          </label>
                           <textarea
                             value={jdText}
                             onChange={(e) => setJdText(e.target.value)}
-                            placeholder="Paste the job description here..."
-                            className="w-full p-2 border border-gray-300 rounded-lg text-sm h-32"
+                            placeholder="Paste the complete job description here (including responsibilities AND requirements)..."
+                            className="w-full p-3 border border-gray-300 rounded-lg text-sm h-36 resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex gap-2 mt-3">
                             <button
                               onClick={() => pasteRealJD(company.name, company.role, jdText)}
                               disabled={pastingJD || !jdText.trim()}
-                              className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
                             >
-                              {pastingJD ? 'Saving...' : 'Save JD'}
+                              {pastingJD ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-4 h-4" />
+                                  Save JD & Get Accurate Skills
+                                </>
+                              )}
                             </button>
                             <button
-                              onClick={() => setShowJDPaste(null)}
-                              className="px-3 py-1 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+                              onClick={() => {
+                                setShowJDPaste(null);
+                                setJdText('');
+                              }}
+                              className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
                             >
                               Cancel
                             </button>
                           </div>
+                          {jdText.trim().length > 0 && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              {jdText.length} characters pasted — the longer and more detailed, the better the results!
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -442,40 +510,121 @@ export default function SkillGapAnalyzerPage() {
         ) : (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
             <h2 className="text-lg font-semibold mb-4">Add Company</h2>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <select
-                value={customCompany}
-                onChange={(e) => setCustomCompany(e.target.value)}
-                className="p-2 border border-gray-300 rounded-lg"
-              >
-                <option value="">Select Company</option>
-                {COMPANY_LIST.map(c => (
-                  <option key={c.name} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-              <select
-                value={customRole}
-                onChange={(e) => setCustomRole(e.target.value)}
-                className="p-2 border border-gray-300 rounded-lg"
-                disabled={!customCompany}
-              >
-                <option value="">Select Role</option>
-                {customCompany && COMPANY_LIST.find(c => c.name === customCompany)?.roles.map(role => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
-              </select>
+              {/* Company Searchable Input */}
+              <div className="relative" ref={companyDropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Company *</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={companyInput}
+                    onChange={(e) => {
+                      setCompanyInput(e.target.value);
+                      setShowCompanyDropdown(true);
+                    }}
+                    onFocus={() => setShowCompanyDropdown(true)}
+                    placeholder="Search or type company name..."
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600"
+                  />
+                </div>
+                {showCompanyDropdown && companyInput && (
+                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredCompanies.length > 0 ? (
+                      filteredCompanies.map((company) => (
+                        <div
+                          key={company}
+                          onClick={() => {
+                            setCompanyInput(company);
+                            setShowCompanyDropdown(false);
+                          }}
+                          className="px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer text-sm flex items-center gap-2"
+                        >
+                          <Briefcase className="w-4 h-4 text-gray-400" />
+                          {company}
+                        </div>
+                      ))
+                    ) : (
+                      <div
+                        onClick={() => {
+                          setShowCompanyDropdown(false);
+                        }}
+                        className="px-4 py-2 hover:bg-green-50 dark:hover:bg-green-900/30 cursor-pointer text-sm flex items-center gap-2 text-green-600"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add "{companyInput}"
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Role Searchable Input */}
+              <div className="relative" ref={roleDropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={roleInput}
+                    onChange={(e) => {
+                      setRoleInput(e.target.value);
+                      setShowRoleDropdown(true);
+                    }}
+                    onFocus={() => setShowRoleDropdown(true)}
+                    placeholder="Search or type role..."
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600"
+                  />
+                </div>
+                {showRoleDropdown && roleInput && (
+                  <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredRoles.length > 0 ? (
+                      filteredRoles.map((role) => (
+                        <div
+                          key={role}
+                          onClick={() => {
+                            setRoleInput(role);
+                            setShowRoleDropdown(false);
+                          }}
+                          className="px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer text-sm flex items-center gap-2"
+                        >
+                          <FileText className="w-4 h-4 text-gray-400" />
+                          {role}
+                        </div>
+                      ))
+                    ) : (
+                      <div
+                        onClick={() => {
+                          setShowRoleDropdown(false);
+                        }}
+                        className="px-4 py-2 hover:bg-green-50 dark:hover:bg-green-900/30 cursor-pointer text-sm flex items-center gap-2 text-green-600"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add "{roleInput}"
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+
             <div className="flex gap-2">
               <button
-                onClick={() => customCompany && customRole && addCompany(customCompany, customRole)}
-                disabled={!customCompany || !customRole}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+                onClick={() => companyInput.trim() && roleInput.trim() && addCompany(companyInput.trim(), roleInput.trim())}
+                disabled={!companyInput.trim() || !roleInput.trim()}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2 font-medium"
               >
+                <Plus className="w-4 h-4" />
                 Add
               </button>
               <button
-                onClick={() => setShowAddCompany(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100"
+                onClick={() => {
+                  setShowAddCompany(false);
+                  setCompanyInput('');
+                  setRoleInput('');
+                }}
+                className="px-6 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium"
               >
                 Cancel
               </button>
