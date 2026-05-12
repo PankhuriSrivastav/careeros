@@ -1,10 +1,13 @@
 'use client';
 
-import { LayoutDashboard, FileText, Target, LogOut, BarChart3, TrendingUp } from 'lucide-react';
+import {
+  LayoutDashboard, FileText, Target, LogOut, BarChart3,
+  TrendingUp, Briefcase
+} from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap';
-  onTabChange: (tab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap') => void;
+  activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities';
+  onTabChange: (tab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities') => void;
   onLogout: () => void;
 }
 
@@ -59,6 +62,16 @@ export default function Sidebar({ activeTab, onTabChange, onLogout }: SidebarPro
         >
           <TrendingUp className="w-5 h-5" />
           <span>Skill Gap</span>
+        </button>
+        {/* 🆕 Opportunities Tab */}
+        <button
+          onClick={() => onTabChange('opportunities')}
+          className={`w-full flex items-center space-x-3 px-4 py-2 rounded-lg transition ${
+            activeTab === 'opportunities' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Briefcase className="w-5 h-5" />
+          <span>Opportunities</span>
         </button>
       </nav>
       <div className="p-4 border-t">
