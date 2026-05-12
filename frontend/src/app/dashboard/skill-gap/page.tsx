@@ -255,10 +255,11 @@ export default function SkillGapAnalyzerPage() {
     }
   };
 
+  // ==================== FIXED analyzeGaps ====================
   const analyzeGaps = async () => {
     setAnalyzing(true);
-    
-    // ✅ Auto-save any unsaved JD before analyzing
+
+    // Auto-save any unsaved JD before analyzing
     if (showJDPaste && jdText.trim()) {
       const [companyName, role] = showJDPaste.split('|');
       try {
@@ -276,7 +277,6 @@ export default function SkillGapAnalyzerPage() {
           })
         });
         
-        // Refresh JD data
         const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
@@ -291,7 +291,7 @@ export default function SkillGapAnalyzerPage() {
         console.error('Auto-save JD failed:', error);
       }
     }
-    
+
     const requiredSkillsMap = new Map<string, { companies: string[]; sourceType: string }>();
     
     selectedCompanies.forEach(company => {
@@ -312,9 +312,23 @@ export default function SkillGapAnalyzerPage() {
     
     const resumeSkillsLower = resumeSkills.map(s => s.toLowerCase());
     const gaps: SkillGap[] = [];
-    
+
+    // Generic/non-technical words to filter out
+    const GENERIC_SKILLS = new Set([
+      'work', 'using', 'support', 'knowledge', 'understanding',
+      'backend', 'frontend', 'architecture', 'models', 'optimize',
+      'integrate', 'integration', 'apis', 'api', 'authentication',
+      'use', 'build', 'manage', 'system', 'data', 'computer',
+      'game', 'science', 'developer', 'development', 'coding',
+      'problem solving', 'communication', 'teamwork', 'leadership',
+    ]);
+
     requiredSkillsMap.forEach((value, skill) => {
       const skillLower = skill.toLowerCase();
+      
+      // Skip generic skills
+      if (GENERIC_SKILLS.has(skillLower)) return;
+
       const hasSkill = resumeSkillsLower.some(rs => 
         rs.includes(skillLower) || skillLower.includes(rs)
       );
@@ -357,19 +371,33 @@ export default function SkillGapAnalyzerPage() {
     
     setSkillGaps(gaps);
     
-    let totalWeeks = 0;
+    // Effort-based timeline calculation
+    const hoursPerSkill: Record<string, number> = {
+      high: 21,    // ~3 weeks at 1h/day
+      medium: 14,  // ~2 weeks
+      low: 4,      // ~0.5 weeks
+    };
+    
+    let totalHours = 0;
     gaps.forEach(gap => {
-      if (gap.priority === 'high') totalWeeks += 3;
-      else if (gap.priority === 'medium') totalWeeks += 2;
-      else totalWeeks += 0.5;
+      if (gap.priority === 'high') totalHours += hoursPerSkill.high;
+      else if (gap.priority === 'medium') totalHours += hoursPerSkill.medium;
+      else totalHours += hoursPerSkill.low;
     });
     
+    const daysNeeded = Math.ceil(totalHours / Math.max(0.5, hoursPerDay));
+    const totalWeeks = Math.ceil(daysNeeded / 7);
+    
     const completionDate = new Date();
-    completionDate.setDate(completionDate.getDate() + Math.ceil(totalWeeks * 7));
+    completionDate.setDate(completionDate.getDate() + daysNeeded);
     
     setLearningTimeline({
-      weeks: Math.ceil(totalWeeks),
-      completionDate: completionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      weeks: totalWeeks,
+      completionDate: completionDate.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      })
     });
     
     setAnalyzing(false);
