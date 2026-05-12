@@ -123,9 +123,10 @@ class OpportunityTable(Base):
     match_percent = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+# ✅ FIXED: Disable automatic table creation – Alembic handles migrations
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Tables are managed by Alembic migrations, no manual creation needed.
+    pass
 
 # ---------- FastAPI ----------
 app = FastAPI(title="CareerOS API")
