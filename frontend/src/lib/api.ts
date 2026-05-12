@@ -39,7 +39,7 @@ export interface JobApplication {
   id: string;
   company: string;
   role: string;
-  status: 'Applied' | 'OA' | 'Interview' | 'Offer' | 'Rejected';
+  status: 'Applied' | 'OA' | 'Interview' | 'Offer' | 'Rejected' | 'Interested';
   applied_date: string;
   salary?: string;
   notes?: string;
@@ -87,7 +87,7 @@ export const apiService = {
     await api.delete(`/applications/${id}`);
   },
 
-  // ✅ NEW: Update application (Edit feature)
+  // Update application (Edit feature)
   async updateApplication(id: string, app: Omit<JobApplication, 'id'>): Promise<JobApplication> {
     const response = await api.put(`/applications/${id}`, app);
     return response.data;
