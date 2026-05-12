@@ -4,7 +4,7 @@ import io
 import json
 import re
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from PyPDF2 import PdfReader
 from collections import Counter
+import httpx  # For HackerEarth API
 
 load_dotenv()
 
@@ -106,6 +107,20 @@ class JDFeedbackTable(Base):
     user_id = Column(UUID(as_uuid=True), nullable=True)
     is_accurate = Column(Boolean, nullable=True)
     comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# 🆕 Opportunity Finder Model
+class OpportunityTable(Base):
+    __tablename__ = "opportunities"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, nullable=False)
+    company_name = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    source_url = Column(String, nullable=False)
+    source_platform = Column(String, nullable=True)
+    trust_score = Column(Integer, default=100)
+    match_percent = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 async def init_db():
@@ -214,7 +229,6 @@ async def extract_skills_with_gemini(text: str) -> List[str]:
         return extract_keywords(text, top_n=15)
     
     try:
-        # 🆕 Improved prompt to exclude generic / non-technical words
         prompt = f"""
 Extract SPECIFIC technical skills from the following text.
 Focus on concrete technologies, programming languages, frameworks, libraries, platforms, and well‑known technical concepts.
@@ -241,11 +255,9 @@ Output:"""
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
             skills = json.loads(json_match.group())
-            # Additional filter for common soft skills (just in case)
             soft_skills = {"problem solving", "communication", "teamwork", "leadership", 
                           "critical thinking", "time management", "creativity", "adaptability",
                           "work ethic", "attention to detail", "organization"}
-            # Also filter the generic words we explicitly banned
             generic_banned = {"backend", "frontend", "architecture", "work", "support", "use",
                               "integrate", "knowledge", "understanding", "models", "optimize",
                               "apis", "api", "authentication", "using", "build", "manage"}
@@ -267,7 +279,6 @@ async def get_company_skills_estimate(company: str, role: str) -> dict:
         }
     
     try:
-        # 🆕 Improved prompt for company estimates
         prompt = f"""
 What are the SPECIFIC technical skills typically required for a {role} at {company}?
 Focus on concrete technologies, programming languages, frameworks, and tools.
@@ -575,4 +586,144 @@ async def get_job_description_by_company_role(
         "resources": estimated_skills.get("resources", []),
         "message": "These skills are AI-estimated. Paste a real JD for accurate results."
     }
+
+# ---------- 🆕 Opportunity Finder Endpoints ----------
+@app.post("/api/opportunities/add")
+async def add_opportunity_from_url(
+    url: str,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not genai_client:
+        raise HTTPException(status_code=500, detail="Gemini not configured")
+
+    # 1. Use Gemini to extract job details from the URL
+    try:
+        response = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"""
+You are an assistant that extracts job details from a URL.
+Extract these fields from the job posting at this URL: {url}
+Return ONLY a JSON object with these keys:
+- company_name (string)
+- role (string)
+- description (string, first 300 words of job description)
+
+If you cannot access the URL, infer the company and role from the URL itself.
+"""
+        )
+        text = response.candidates[0].content.parts[0].text
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not json_match:
+            raise HTTPException(status_code=400, detail="Could not parse job details from URL")
+        details = json.loads(json_match.group())
+    except Exception as e:
+        print(f"Gemini URL extraction error: {e}")
+        raise HTTPException(status_code=400, detail="Failed to extract job details. Please paste the description manually.")
+
+    # 2. Match with user's latest resume keywords
+    stmt = select(UserResumeTable).where(UserResumeTable.user_id == current_user["sub"]).order_by(desc(UserResumeTable.created_at))
+    result = await db.execute(stmt)
+    latest_resume = result.scalars().first()
+    resume_keywords = []
+    if latest_resume and latest_resume.keywords:
+        resume_keywords = latest_resume.keywords.split(",")
+
+    match_percent = 0
+    if resume_keywords and details.get("description"):
+        desc_lower = details["description"].lower()
+        matched = [kw for kw in resume_keywords if kw.lower() in desc_lower]
+        match_percent = int((len(matched) / len(resume_keywords)) * 100) if resume_keywords else 0
+
+    # 3. Trust Score
+    trust = 100
+    desc_text = details.get("description", "")
+    url_lower = url.lower()
+    if any(w in desc_text.lower() for w in ["registration fee", "pay to apply", "deposit"]):
+        trust -= 40
+    if any(w in desc_text.lower() for w in ["apply in 24 hours", "limited seats", "urgent", "hurry"]):
+        trust -= 15
+    if "no experience" in desc_text.lower() and "lpa" in desc_text.lower():
+        trust -= 20
+    suspicious_domains = ["blogspot", "wordpress", "freejob", ".tk", ".ml"]
+    if any(dom in url_lower for dom in suspicious_domains):
+        trust -= 25
+    trusted_domains = ["unstop.com", "internshala.com", "linkedin.com", "wellfound.com", "hackerearth.com"]
+    if any(dom in url_lower for dom in trusted_domains):
+        trust += 30
+    trust = max(0, min(100, trust))
+
+    # 4. Determine source platform
+    source_platform = None
+    for plat in ["unstop", "internshala", "linkedin", "wellfound", "naukri", "github", "hackerearth"]:
+        if plat in url_lower:
+            source_platform = plat.capitalize()
+            break
+
+    # 5. Save
+    new_opp = OpportunityTable(
+        user_id=current_user["sub"],
+        company_name=details.get("company_name", "Unknown"),
+        role=details.get("role", "Unknown"),
+        description=details.get("description", ""),
+        source_url=url,
+        source_platform=source_platform,
+        trust_score=trust,
+        match_percent=match_percent
+    )
+    db.add(new_opp)
+    await db.commit()
+    await db.refresh(new_opp)
+
+    return {
+        "id": str(new_opp.id),
+        "company_name": new_opp.company_name,
+        "role": new_opp.role,
+        "description": new_opp.description,
+        "source_url": new_opp.source_url,
+        "source_platform": new_opp.source_platform,
+        "trust_score": new_opp.trust_score,
+        "match_percent": new_opp.match_percent,
+        "created_at": new_opp.created_at.isoformat() if new_opp.created_at else None
+    }
+
+@app.get("/api/opportunities")
+async def list_opportunities(
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(OpportunityTable).where(OpportunityTable.user_id == current_user["sub"]).order_by(desc(OpportunityTable.created_at))
+    result = await db.execute(stmt)
+    opportunities = result.scalars().all()
+    return [
+        {
+            "id": str(opp.id),
+            "company_name": opp.company_name,
+            "role": opp.role,
+            "description": opp.description,
+            "source_url": opp.source_url,
+            "source_platform": opp.source_platform,
+            "trust_score": opp.trust_score,
+            "match_percent": opp.match_percent,
+            "created_at": opp.created_at.isoformat() if opp.created_at else None
+        }
+        for opp in opportunities
+    ]
+
+@app.get("/api/opportunities/hackerearth")
+async def fetch_hackerearth_challenges():
+    client_id = os.getenv("HACKEREARTH_CLIENT_ID")
+    client_secret = os.getenv("HACKEREARTH_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="HackerEarth API not configured")
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.hackerearth.com/v3/challenges/upcoming/",
+            params={"client_id": client_id, "client_secret": client_secret}
+        )
+        if resp.status_code != 200:
+            return []  # fallback
+        data = resp.json()
+    return data.get("data", [])
 # uvicorn main:app --reload --port 8000
