@@ -43,6 +43,7 @@ export interface JobApplication {
   applied_date: string;
   salary?: string;
   notes?: string;
+  job_description?: string;   // ← this line must be present
 }
 
 export const apiService = {
