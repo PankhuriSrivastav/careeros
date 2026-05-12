@@ -9,9 +9,12 @@ import ResumeAnalyzerTab from '@/components/dashboard/ResumeAnalyzerTab';
 import JobMatcherTab from '@/components/dashboard/JobMatcherTab';
 import AnalyticsPage from './analytics/page';
 import SkillGapAnalyzerPage from './skill-gap/page';
+import OpportunitiesPage from './opportunities/page'; // 🆕
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap'>('applications');
+  const [activeTab, setActiveTab] = useState<
+    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' // 🆕
+  >('applications');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -74,7 +77,6 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
-  // Show loading only on first load for applications tab
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -98,6 +100,7 @@ export default function DashboardPage() {
             {activeTab === 'match' && 'Job Matcher'}
             {activeTab === 'analytics' && 'Analytics Dashboard'}
             {activeTab === 'skill-gap' && 'Skill Gap Analyzer'}
+            {activeTab === 'opportunities' && 'Opportunity Finder'} {/* 🆕 */}
           </h1>
           <button
             onClick={handleLogout}
@@ -127,6 +130,9 @@ export default function DashboardPage() {
           )}
           {activeTab === 'skill-gap' && (
             <SkillGapAnalyzerPage />
+          )}
+          {activeTab === 'opportunities' && (     // 🆕
+            <OpportunitiesPage />
           )}
         </div>
       </div>
