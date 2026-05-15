@@ -3,6 +3,7 @@ import uuid
 import io
 import json
 import re
+import asyncio
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,8 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from PyPDF2 import PdfReader
 from collections import Counter
-import httpx  # For HackerEarth API
+from duckduckgo_search import DDGS   # pip install duckduckgo-search
+import httpx
 
 load_dotenv()
 
@@ -27,11 +29,12 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# DuckDuckGo: completely free, no API key needed, no rate limits for normal use
 
 if not all([SUPABASE_URL, SUPABASE_ANON_KEY, DATABASE_URL]):
     raise ValueError("Missing environment variables. Check .env file")
 
-# ---------- Gemini Setup (New SDK) ----------
+# ---------- Gemini Setup ----------
 genai_client = None
 if GEMINI_API_KEY:
     try:
@@ -109,7 +112,6 @@ class JDFeedbackTable(Base):
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# 🆕 Opportunity Finder Model
 class OpportunityTable(Base):
     __tablename__ = "opportunities"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -123,15 +125,13 @@ class OpportunityTable(Base):
     match_percent = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# ✅ FIXED: Disable automatic table creation – Alembic handles migrations
+# Tables managed by Alembic — no manual creation
 async def init_db():
-    # Tables are managed by Alembic migrations, no manual creation needed.
     pass
 
 # ---------- FastAPI ----------
 app = FastAPI(title="CareerOS API")
 
-# Custom JSON serialization for UUID objects
 def custom_json_serializer(obj):
     if isinstance(obj, uuid.UUID):
         return str(obj)
@@ -151,10 +151,9 @@ class CustomJSONResponse(JSONResponse):
 
 app.default_response_class = CustomJSONResponse
 
-# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Restrict to your Vercel domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -179,7 +178,7 @@ async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
 
-# ---------- Pydantic models ----------
+# ---------- Pydantic Models ----------
 class JobApplication(BaseModel):
     company: str
     role: str
@@ -208,11 +207,34 @@ class JobDescriptionCreate(BaseModel):
     job_description: str
     share_consent: bool = False
 
-# ---------- Helper functions ----------
+class OpportunitySearchRequest(BaseModel):
+    keywords: Optional[List[str]] = None   # if None, auto-pulled from resume
+    platforms: Optional[List[str]] = None  # filter by platform
+    opportunity_type: Optional[str] = "all"  # all, internship, hackathon, job
+
+class TrackOpportunityRequest(BaseModel):
+    company_name: str
+    role: str
+    source_url: str
+    source_platform: Optional[str] = None
+    description: Optional[str] = None
+    trust_score: Optional[int] = 100
+    match_percent: Optional[int] = 0
+
+# ---------- Helper Functions ----------
 def extract_keywords(text: str, top_n: int = 20):
     words = text.lower().split()
-    stopwords = {"the","and","for","with","experience","skills","of","to","in","that","is","are","was","were","a","an","on","at","by","be","this","from","as","i","you","we","they","your","our","their","have","has","had","will","would","could","should","may","might","must","also","etc","via","etc"}
-    words = [re.sub(r'[^a-z]', '', w) for w in words if len(w) > 2 and w not in stopwords and re.match(r'^[a-z]+$', w)]
+    stopwords = {
+        "the","and","for","with","experience","skills","of","to","in","that","is","are",
+        "was","were","a","an","on","at","by","be","this","from","as","i","you","we","they",
+        "your","our","their","have","has","had","will","would","could","should","may",
+        "might","must","also","etc","via"
+    }
+    words = [
+        re.sub(r'[^a-z]', '', w)
+        for w in words
+        if len(w) > 2 and w not in stopwords and re.match(r'^[a-z]+$', w)
+    ]
     counter = Counter(words)
     return [w for w, _ in counter.most_common(top_n)]
 
@@ -224,31 +246,92 @@ def calculate_match(resume_keywords: List[str], job_keywords: List[str]):
     match_percent = len(matched) / len(job_set) * 100 if job_set else 0
     return round(match_percent), list(missing)
 
+def calculate_trust_score(title: str, snippet: str, url: str) -> int:
+    """
+    Rule-based trust scoring. No AI needed — simple pattern matching.
+    Start at 100, subtract for red flags, add for trusted platforms.
+    """
+    trust = 100
+    text = (title + " " + snippet).lower()
+    url_lower = url.lower()
+
+    # Red flags — deduct points
+    payment_flags = ["registration fee", "pay to apply", "deposit required", "fee required", "pay fee"]
+    if any(flag in text for flag in payment_flags):
+        trust -= 40
+
+    urgency_flags = ["apply in 24 hours", "limited seats", "hurry", "act now", "immediate joining"]
+    if any(flag in text for flag in urgency_flags):
+        trust -= 15
+
+    # Unrealistic salary for freshers
+    if ("no experience" in text or "fresher" in text) and any(x in text for x in ["10 lpa", "15 lpa", "20 lpa"]):
+        trust -= 20
+
+    # Suspicious domains
+    suspicious_domains = ["blogspot", "wordpress", "freejob", ".tk", ".ml", ".cf", "bit.ly"]
+    if any(dom in url_lower for dom in suspicious_domains):
+        trust -= 25
+
+    # No company info in snippet
+    if len(snippet.strip()) < 50:
+        trust -= 10
+
+    # Trusted platforms — add points
+    trusted_domains = ["unstop.com", "internshala.com", "linkedin.com", "wellfound.com", "hackerearth.com", "naukri.com"]
+    if any(dom in url_lower for dom in trusted_domains):
+        trust += 30
+
+    return max(0, min(100, trust))
+
+def detect_platform(url: str) -> Optional[str]:
+    """Detect source platform from URL."""
+    url_lower = url.lower()
+    platforms = {
+        "unstop": "Unstop",
+        "internshala": "Internshala",
+        "linkedin": "LinkedIn",
+        "wellfound": "Wellfound",
+        "naukri": "Naukri",
+        "github": "GitHub",
+        "hackerearth": "HackerEarth"
+    }
+    for key, name in platforms.items():
+        if key in url_lower:
+            return name
+    return None
+
+def calculate_match_from_snippet(resume_keywords: List[str], title: str, snippet: str) -> int:
+    """Match resume keywords against job title and snippet."""
+    if not resume_keywords:
+        return 0
+    combined_text = (title + " " + snippet).lower()
+    matched = [kw for kw in resume_keywords if kw.lower() in combined_text]
+    return int((len(matched) / len(resume_keywords)) * 100) if resume_keywords else 0
+
 async def extract_skills_with_gemini(text: str) -> List[str]:
-    """Extract SPECIFIC technical skills from resume or JD using Gemini"""
+    """
+    Extract specific technical skills from resume or JD text using Gemini.
+    """
     if genai_client is None:
         return extract_keywords(text, top_n=15)
-    
+
     try:
         prompt = f"""
 Extract SPECIFIC technical skills from the following text.
-Focus on concrete technologies, programming languages, frameworks, libraries, platforms, and well‑known technical concepts.
 Return ONLY a JSON array of skill names, nothing else.
 
 Rules:
-- Only list concrete technologies, languages, frameworks, libraries, platforms, or well‑known technical concepts (e.g., "React", "Golang", "AWS S3", "CI/CD", "REST API Design", "Docker")
-- Do NOT return generic nouns or verbs like "backend", "frontend", "architecture", "work", "support", "use", "integrate", "knowledge", "understanding", "models", "optimize"
-- Do NOT return soft skills like "Problem Solving", "Communication", "Teamwork", "Leadership"
+- Only list concrete technologies, languages, frameworks, libraries, platforms (e.g., "React", "Python", "AWS")
+- Do NOT include soft skills like "Problem Solving", "Communication", "Teamwork"
+- Do NOT include generic words like "backend", "frontend", "architecture"
 - Limit to 5-10 most important skills
-- Prefer specific tools/languages over general concepts
 
 Text: {text[:3000]}
 
-Example good output: ["React", "Node.js", "PostgreSQL", "REST API Design", "AWS", "Docker", "CI/CD", "TypeScript"]
-Example bad output: ["Problem Solving", "Communication", "Front-end technologies", "Backend Development"]
-
+Example good output: ["React", "Node.js", "PostgreSQL", "AWS", "Docker", "TypeScript"]
 Output:"""
-        
+
         response = genai_client.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt
@@ -256,82 +339,134 @@ Output:"""
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
             skills = json.loads(json_match.group())
-            soft_skills = {"problem solving", "communication", "teamwork", "leadership", 
-                          "critical thinking", "time management", "creativity", "adaptability",
-                          "work ethic", "attention to detail", "organization"}
-            generic_banned = {"backend", "frontend", "architecture", "work", "support", "use",
-                              "integrate", "knowledge", "understanding", "models", "optimize",
-                              "apis", "api", "authentication", "using", "build", "manage"}
-            combined_filter = soft_skills.union(generic_banned)
-            skills = [s for s in skills if s.lower() not in combined_filter]
-            return skills[:15]
+            banned = {
+                "problem solving", "communication", "teamwork", "leadership",
+                "backend", "frontend", "architecture", "work", "support",
+                "knowledge", "understanding", "models", "optimize", "api", "apis"
+            }
+            return [s for s in skills if s.lower() not in banned][:15]
         return extract_keywords(text, top_n=15)
     except Exception as e:
-        print(f"Gemini error: {e}")
+        print(f"Gemini skill extraction error: {e}")
         return extract_keywords(text, top_n=15)
 
-async def get_company_skills_estimate(company: str, role: str) -> dict:
-    """Get estimated skills for a company using Gemini (fallback when no JD exists)"""
-    if genai_client is None:
-        return {
-            "skills": ["Python", "Java", "SQL", "Data Structures", "Algorithms"],
-            "sample_problems": ["LeetCode Top Interview Questions"],
-            "resources": ["LeetCode", "GeeksforGeeks"]
-        }
-    
+async def search_duckduckgo(query: str, max_results: int = 10) -> List[dict]:
+    """
+    Search using DuckDuckGo — completely free, no API key, no signup.
+    Returns list of {title, snippet, url} dicts — same format as before.
+    """
     try:
-        prompt = f"""
-What are the SPECIFIC technical skills typically required for a {role} at {company}?
-Focus on concrete technologies, programming languages, frameworks, and tools.
-Return ONLY a JSON object with this structure:
-{{
-  "skills": ["skill1", "skill2", "skill3"],
-  "sample_problems": ["problem1", "problem2"],
-  "resources": ["resource1", "resource2"]
-}}
+        loop = asyncio.get_running_loop()
+        
+        def _search():
+            results = []
+            with DDGS() as ddgs:
+                for r in ddgs.text(
+                    query,
+                    region="in-en",     # India-biased results
+                    safesearch="off",
+                    timelimit="m",       # Past month
+                    max_results=max_results
+                ):
+                    results.append({
+                        "title": r.get("title", ""),
+                        "snippet": r.get("body", ""),   # DDG uses 'body' not 'snippet'
+                        "url": r.get("href", "")         # DDG uses 'href' not 'link'
+                    })
+            return results
+        
+        return await loop.run_in_executor(None, _search)
+    
+    except Exception as e:
+        print(f"DuckDuckGo search error: {e}")
+        return []
 
-Rules:
-- Include specific technologies (e.g., "React", "Python", "AWS", "Docker", "Kubernetes")
-- Include concrete concepts (e.g., "Distributed Systems", "CI/CD", "Microservices")
-- DO NOT include soft skills or generic words like "backend", "frontend", "architecture", "work", "support", "use", "integrate", "knowledge"
-- Keep it to 5-7 most important technical skills
-- Focus on what the company actually tests/requires in interviews
+def build_opportunity_queries(
+    keywords: List[str],
+    opportunity_type: str = "all"
+) -> List[str]:
+    """
+    Build targeted search queries for each platform.
+    Uses site: operator which DuckDuckGo supports perfectly.
+    """
+    top_keywords = keywords[:3] if keywords else ["software", "engineering"]
+    kw_string = " ".join(f'"{kw}"' for kw in top_keywords)
 
-Example for Google SWE: ["Python", "Java", "Data Structures", "Algorithms", "System Design", "Distributed Systems"]
-Example for Amazon SDE: ["Java", "AWS", "Microservices", "System Design", "Data Structures"]
-"""
+    queries = []
+
+    if opportunity_type in ["all", "internship"]:
+        queries.extend([
+            f'site:internshala.com internship {kw_string} India 2026',
+            f'site:unstop.com internship {kw_string} 2026',
+            f'site:linkedin.com/jobs internship {kw_string} India',
+            f'site:wellfound.com jobs internship {kw_string}',
+        ])
+
+    if opportunity_type in ["all", "hackathon"]:
+        queries.extend([
+            f'site:unstop.com hackathon {kw_string} 2026',
+            f'site:hackerearth.com challenge {kw_string} 2026',
+        ])
+
+    if opportunity_type in ["all", "job"]:
+        queries.extend([
+            f'site:naukri.com job {kw_string} fresher India',
+            f'site:linkedin.com/jobs {kw_string} "fresher" OR "entry level" India',
+        ])
+
+    return queries
+
+async def generate_study_plan_with_gemini(
+    weak_topics: List[dict],
+    company: str,
+    role: str,
+    weeks: int
+) -> str:
+    """Generate study plan using Gemini — completely free tier."""
+    if genai_client is None:
+        plan = f"Study plan for {company} {role} ({weeks} weeks):\n\n"
+        for i, topic in enumerate(weak_topics[:weeks], 1):
+            plan += f"Week {i}: Focus on {topic['topic']} — solve 8-10 medium problems\n"
+        return plan
+
+    topics_text = "\n".join([
+        f"- {t['topic']}: appears in {t['company_frequency']}% of {company} interviews"
+        for t in weak_topics
+    ])
+
+    prompt = f"""A student is preparing for {company} {role} interview. They have {weeks} weeks.
+
+Their weakest DSA topics based on real interview data:
+{topics_text}
+
+Generate a specific week-by-week study plan. For each week:
+- Primary topic to focus on
+- 3 specific LeetCode problems by name
+- One free resource (YouTube or article)
+- Daily time commitment
+
+Keep it practical and specific. Maximum 300 words."""
+
+    try:
         response = genai_client.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt
         )
-        json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group())
-            soft_skills = {"problem solving", "communication", "teamwork", "leadership"}
-            generic_banned = {"backend", "frontend", "architecture", "work", "support", "use",
-                              "integrate", "knowledge", "understanding", "models", "optimize"}
-            combined_filter = soft_skills.union(generic_banned)
-            if "skills" in result:
-                result["skills"] = [s for s in result["skills"] if s.lower() not in combined_filter]
-            return result
+        return response.text
     except Exception as e:
-        print(f"Gemini estimate error: {e}")
-    
-    return {
-        "skills": ["Python", "Java", "SQL", "Data Structures", "Algorithms"],
-        "sample_problems": ["LeetCode Top Interview Questions"],
-        "resources": ["LeetCode", "GeeksforGeeks"]
-    }
+        print(f"Gemini study plan error: {e}")
+        return f"Focus on {weak_topics[0]['topic']} first — it appears most frequently in {company} interviews."
 
-# ---------- API Endpoints ----------
+# ---------- Startup ----------
 @app.on_event("startup")
 async def startup():
     await init_db()
 
 @app.get("/")
 async def root():
-    return {"status": "CareerOS API running with Supabase"}
+    return {"status": "CareerOS API running", "version": "2.0", "search_provider": "DuckDuckGo (free)"}
 
+# ---------- Auth Endpoints ----------
 @app.post("/auth/register")
 async def register(user: UserRegister):
     try:
@@ -361,10 +496,11 @@ async def login(user: UserLogin):
         print(f"Login error: {e}")
         raise HTTPException(401, detail=str(e))
 
+# ---------- Application Endpoints ----------
 @app.post("/applications/")
 async def create_application(
     app_data: JobApplication,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     app_dict = app_data.dict()
@@ -377,11 +513,13 @@ async def create_application(
 
 @app.get("/applications/")
 async def get_applications(
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
-        ApplicationTable.__table__.select().where(ApplicationTable.user_id == current_user["sub"])
+        ApplicationTable.__table__.select().where(
+            ApplicationTable.user_id == current_user["sub"]
+        ).order_by(desc(ApplicationTable.created_at))
     )
     apps = result.fetchall()
     return [dict(app._mapping) for app in apps]
@@ -389,7 +527,7 @@ async def get_applications(
 @app.delete("/applications/{app_id}")
 async def delete_application(
     app_id: str,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -410,23 +548,23 @@ async def delete_application(
 async def update_application(
     app_id: str,
     app_data: JobApplication,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
         app_uuid = uuid.UUID(app_id)
     except ValueError:
         raise HTTPException(400, "Invalid UUID format")
+
     stmt = select(ApplicationTable).where(
         ApplicationTable.id == app_uuid,
         ApplicationTable.user_id == current_user["sub"]
     )
     result = await db.execute(stmt)
     existing_app = result.scalar_one_or_none()
-    
     if not existing_app:
         raise HTTPException(404, "Application not found")
-    
+
     existing_app.company = app_data.company
     existing_app.role = app_data.role
     existing_app.status = app_data.status
@@ -434,23 +572,26 @@ async def update_application(
     existing_app.salary = app_data.salary
     existing_app.notes = app_data.notes
     existing_app.updated_at = datetime.utcnow()
-    
     await db.commit()
-    
     return {"message": "Application updated", "id": app_id}
 
+# ---------- Resume Endpoints ----------
 @app.post("/resume/analyze")
 async def analyze_resume(
     file: UploadFile = File(...),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     content = await file.read()
     pdf = PdfReader(io.BytesIO(content))
     text = "".join(page.extract_text() or "" for page in pdf.pages)
-    
+
     keywords = await extract_skills_with_gemini(text)
-    ideal_skills = {"python", "react", "mongodb", "express", "nodejs", "git", "docker", "aws", "javascript", "typescript"}
+
+    ideal_skills = {
+        "python", "react", "mongodb", "express", "nodejs", "git",
+        "docker", "aws", "javascript", "typescript"
+    }
     missing = [skill for skill in ideal_skills if skill not in [k.lower() for k in keywords]]
     score = max(0, 100 - len(missing) * 8)
 
@@ -472,13 +613,15 @@ async def analyze_resume(
 @app.post("/job/match")
 async def match_job(
     request: JobMatchRequest,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     if request.resume_text:
         resume_text = request.resume_text
     else:
-        stmt = select(UserResumeTable).where(UserResumeTable.user_id == current_user["sub"]).order_by(desc(UserResumeTable.created_at))
+        stmt = select(UserResumeTable).where(
+            UserResumeTable.user_id == current_user["sub"]
+        ).order_by(desc(UserResumeTable.created_at))
         result = await db.execute(stmt)
         latest_resume = result.scalars().first()
         if not latest_resume:
@@ -491,14 +634,14 @@ async def match_job(
 
     suggestions = []
     if match_percent < 50:
-        suggestions.append("Your resume shares few keywords with this job description. Consider adding relevant skills and experiences.")
+        suggestions.append("Low match. Your resume shares few keywords with this job. Add relevant skills.")
     elif match_percent < 75:
-        suggestions.append("Decent match. Add some of the missing keywords to improve your resume.")
+        suggestions.append("Decent match. Adding missing keywords will improve your chances.")
     else:
-        suggestions.append("Great match! Your resume aligns well with this role.")
+        suggestions.append("Great match. Your resume aligns well with this role.")
 
     if missing_keywords:
-        suggestions.append(f"Add these keywords to your resume: {', '.join(missing_keywords[:5])}")
+        suggestions.append(f"Consider adding: {', '.join(missing_keywords[:5])}")
 
     return {
         "match_percent": match_percent,
@@ -508,20 +651,20 @@ async def match_job(
         "suggestions": suggestions
     }
 
-# ---------- Skill Gap Analyzer Endpoints ----------
+# ---------- Skill Gap / JD Endpoints ----------
 @app.post("/api/job-descriptions")
 async def create_job_description(
     jd_data: JobDescriptionCreate,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     extracted_skills = await extract_skills_with_gemini(jd_data.job_description)
-    
+
     try:
         user_uuid = uuid.UUID(current_user["sub"])
     except ValueError:
         user_uuid = None
-    
+
     new_jd = JobDescriptionTable(
         company_name=jd_data.company_name,
         role=jd_data.role,
@@ -535,7 +678,7 @@ async def create_job_description(
     db.add(new_jd)
     await db.commit()
     await db.refresh(new_jd)
-    
+
     return {
         "id": str(new_jd.id),
         "extracted_skills": extracted_skills,
@@ -550,7 +693,7 @@ async def get_job_description_by_company_role(
     db: AsyncSession = Depends(get_db)
 ):
     six_months_ago = datetime.utcnow() - timedelta(days=180)
-    
+
     stmt = select(JobDescriptionTable).where(
         and_(
             JobDescriptionTable.company_name.ilike(company),
@@ -560,10 +703,10 @@ async def get_job_description_by_company_role(
             JobDescriptionTable.is_active == True
         )
     ).order_by(desc(JobDescriptionTable.created_at))
-    
+
     result = await db.execute(stmt)
     community_jd = result.scalar_one_or_none()
-    
+
     if community_jd:
         age_days = (datetime.utcnow() - community_jd.created_at).days
         return {
@@ -576,124 +719,135 @@ async def get_job_description_by_company_role(
             "is_fresh": age_days < 30,
             "job_description": community_jd.job_description
         }
-    
-    estimated_skills = await get_company_skills_estimate(company, role)
-    
+
     return {
         "exists": False,
-        "source_type": "ai_estimate",
-        "extracted_skills": estimated_skills.get("skills", []),
-        "sample_problems": estimated_skills.get("sample_problems", []),
-        "resources": estimated_skills.get("resources", []),
-        "message": "These skills are AI-estimated. Paste a real JD for accurate results."
+        "source_type": "no_data",
+        "extracted_skills": [],
+        "message": "No JD found for this company and role. Paste a real JD to get accurate skill gap analysis.",
+        "disclaimer": "AI estimates for company requirements are not provided as they may be inaccurate."
     }
 
-# ---------- 🆕 Opportunity Finder Endpoints ----------
-@app.post("/api/opportunities/add")
-async def add_opportunity_from_url(
-    url: str,
-    current_user = Depends(get_current_user),
+# ---------- Opportunity Finder (DuckDuckGo) ----------
+@app.get("/api/opportunities/search")
+async def search_opportunities(
+    opportunity_type: str = Query(default="all", description="all, internship, hackathon, job"),
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    if not genai_client:
-        raise HTTPException(status_code=500, detail="Gemini not configured")
-
-    # 1. Use Gemini to extract job details from the URL
-    try:
-        response = genai_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=f"""
-You are an assistant that extracts job details from a URL.
-Extract these fields from the job posting at this URL: {url}
-Return ONLY a JSON object with these keys:
-- company_name (string)
-- role (string)
-- description (string, first 300 words of job description)
-
-If you cannot access the URL, infer the company and role from the URL itself.
-"""
-        )
-        text = response.candidates[0].content.parts[0].text
-        json_match = re.search(r'\{.*\}', text, re.DOTALL)
-        if not json_match:
-            raise HTTPException(status_code=400, detail="Could not parse job details from URL")
-        details = json.loads(json_match.group())
-    except Exception as e:
-        print(f"Gemini URL extraction error: {e}")
-        raise HTTPException(status_code=400, detail="Failed to extract job details. Please paste the description manually.")
-
-    # 2. Match with user's latest resume keywords
-    stmt = select(UserResumeTable).where(UserResumeTable.user_id == current_user["sub"]).order_by(desc(UserResumeTable.created_at))
+    # Step 1 — Get student's resume keywords
+    stmt = select(UserResumeTable).where(
+        UserResumeTable.user_id == current_user["sub"]
+    ).order_by(desc(UserResumeTable.created_at))
     result = await db.execute(stmt)
     latest_resume = result.scalars().first()
-    resume_keywords = []
-    if latest_resume and latest_resume.keywords:
-        resume_keywords = latest_resume.keywords.split(",")
 
-    match_percent = 0
-    if resume_keywords and details.get("description"):
-        desc_lower = details["description"].lower()
-        matched = [kw for kw in resume_keywords if kw.lower() in desc_lower]
-        match_percent = int((len(matched) / len(resume_keywords)) * 100) if resume_keywords else 0
+    if not latest_resume or not latest_resume.keywords:
+        raise HTTPException(
+            400,
+            "No resume found. Upload your resume first so we can find matching opportunities."
+        )
 
-    # 3. Trust Score
-    trust = 100
-    desc_text = details.get("description", "")
-    url_lower = url.lower()
-    if any(w in desc_text.lower() for w in ["registration fee", "pay to apply", "deposit"]):
-        trust -= 40
-    if any(w in desc_text.lower() for w in ["apply in 24 hours", "limited seats", "urgent", "hurry"]):
-        trust -= 15
-    if "no experience" in desc_text.lower() and "lpa" in desc_text.lower():
-        trust -= 20
-    suspicious_domains = ["blogspot", "wordpress", "freejob", ".tk", ".ml"]
-    if any(dom in url_lower for dom in suspicious_domains):
-        trust -= 25
-    trusted_domains = ["unstop.com", "internshala.com", "linkedin.com", "wellfound.com", "hackerearth.com"]
-    if any(dom in url_lower for dom in trusted_domains):
-        trust += 30
-    trust = max(0, min(100, trust))
+    resume_keywords = [kw.strip() for kw in latest_resume.keywords.split(",") if kw.strip()]
 
-    # 4. Determine source platform
-    source_platform = None
-    for plat in ["unstop", "internshala", "linkedin", "wellfound", "naukri", "github", "hackerearth"]:
-        if plat in url_lower:
-            source_platform = plat.capitalize()
-            break
+    # Step 2 — Build queries
+    queries = build_opportunity_queries(resume_keywords, opportunity_type)
 
-    # 5. Save
+    # Step 3 — Run queries concurrently and collect results
+    all_raw_results = []
+    seen_urls = set()
+
+    for query in queries:
+        raw = await search_duckduckgo(query, max_results=10)
+        for item in raw:
+            url = item["url"]
+            if url not in seen_urls:
+                seen_urls.add(url)
+                all_raw_results.append(item)
+
+    # Step 4 — Score each result
+    scored_results = []
+    for item in all_raw_results:
+        title = item["title"]
+        snippet = item["snippet"]
+        url = item["url"]
+
+        match_percent = calculate_match_from_snippet(resume_keywords, title, snippet)
+        trust_score = calculate_trust_score(title, snippet, url)
+        platform = detect_platform(url)
+
+        if trust_score < 20:
+            continue
+
+        scored_results.append({
+            "title": title,
+            "snippet": snippet,
+            "url": url,
+            "platform": platform,
+            "match_percent": match_percent,
+            "trust_score": trust_score,
+            "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
+            "opportunity_type": opportunity_type
+        })
+
+    scored_results.sort(key=lambda x: x["match_percent"], reverse=True)
+
+    return {
+        "results": scored_results[:20],
+        "total": len(scored_results),
+        "keywords_used": resume_keywords[:5],
+        "disclaimer": "Results sourced via DuckDuckGo (free, no API key). Verify on the platform before applying."
+    }
+
+@app.post("/api/opportunities/track")
+async def track_opportunity(
+    data: TrackOpportunityRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     new_opp = OpportunityTable(
         user_id=current_user["sub"],
-        company_name=details.get("company_name", "Unknown"),
-        role=details.get("role", "Unknown"),
-        description=details.get("description", ""),
-        source_url=url,
-        source_platform=source_platform,
-        trust_score=trust,
-        match_percent=match_percent
+        company_name=data.company_name,
+        role=data.role,
+        description=data.description or "",
+        source_url=data.source_url,
+        source_platform=data.source_platform,
+        trust_score=data.trust_score,
+        match_percent=data.match_percent
     )
     db.add(new_opp)
+
+    new_app = ApplicationTable(
+        id=uuid.uuid4(),
+        user_id=current_user["sub"],
+        company=data.company_name,
+        role=data.role,
+        status="Interested",
+        applied_date=datetime.utcnow().strftime("%Y-%m-%d"),
+        notes=f"Found via {data.source_platform or 'Opportunity Finder'}. {data.source_url}",
+        job_description=data.description
+    )
+    db.add(new_app)
+
     await db.commit()
     await db.refresh(new_opp)
 
     return {
-        "id": str(new_opp.id),
-        "company_name": new_opp.company_name,
-        "role": new_opp.role,
-        "description": new_opp.description,
-        "source_url": new_opp.source_url,
-        "source_platform": new_opp.source_platform,
-        "trust_score": new_opp.trust_score,
-        "match_percent": new_opp.match_percent,
-        "created_at": new_opp.created_at.isoformat() if new_opp.created_at else None
+        "message": "Opportunity tracked and added to your application tracker",
+        "opportunity_id": str(new_opp.id),
+        "application_id": str(new_app.id),
+        "company": data.company_name,
+        "role": data.role
     }
 
-@app.get("/api/opportunities")
-async def list_opportunities(
-    current_user = Depends(get_current_user),
+@app.get("/api/opportunities/saved")
+async def get_saved_opportunities(
+    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    stmt = select(OpportunityTable).where(OpportunityTable.user_id == current_user["sub"]).order_by(desc(OpportunityTable.created_at))
+    stmt = select(OpportunityTable).where(
+        OpportunityTable.user_id == current_user["sub"]
+    ).order_by(desc(OpportunityTable.created_at))
     result = await db.execute(stmt)
     opportunities = result.scalars().all()
     return [
@@ -705,6 +859,7 @@ async def list_opportunities(
             "source_url": opp.source_url,
             "source_platform": opp.source_platform,
             "trust_score": opp.trust_score,
+            "trust_label": "High" if opp.trust_score >= 70 else "Medium" if opp.trust_score >= 40 else "Low",
             "match_percent": opp.match_percent,
             "created_at": opp.created_at.isoformat() if opp.created_at else None
         }
@@ -715,16 +870,98 @@ async def list_opportunities(
 async def fetch_hackerearth_challenges():
     client_id = os.getenv("HACKEREARTH_CLIENT_ID")
     client_secret = os.getenv("HACKEREARTH_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        raise HTTPException(status_code=500, detail="HackerEarth API not configured")
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            "https://api.hackerearth.com/v3/challenges/upcoming/",
-            params={"client_id": client_id, "client_secret": client_secret}
+    if not client_id or not client_secret:
+        return {
+            "challenges": [],
+            "message": "HackerEarth API not configured."
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.hackerearth.com/v3/challenges/upcoming/",
+                params={"client_id": client_id, "client_secret": client_secret}
+            )
+            if resp.status_code != 200:
+                return {"challenges": [], "message": "HackerEarth API error"}
+            data = resp.json()
+            return {"challenges": data.get("data", []), "total": len(data.get("data", []))}
+    except Exception as e:
+        print(f"HackerEarth API error: {e}")
+        return {"challenges": [], "message": "Could not reach HackerEarth API"}
+
+# ---------- Study Plan (Gemini Free Tier) ----------
+@app.post("/api/study-plan")
+async def generate_study_plan(
+    company: str,
+    role: str,
+    weeks: int = 4,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    weak_topics = [
+        {"topic": "Dynamic Programming", "gap_score": 60, "company_frequency": 75},
+        {"topic": "Graphs", "gap_score": 45, "company_frequency": 60},
+        {"topic": "Trees", "gap_score": 30, "company_frequency": 55},
+    ]
+
+    plan = await generate_study_plan_with_gemini(weak_topics, company, role, weeks)
+
+    return {
+        "company": company,
+        "role": role,
+        "weeks": weeks,
+        "study_plan": plan,
+        "disclaimer": "Study plan is AI-generated based on commonly reported interview topics."
+    }
+
+# ---------- Analytics Endpoint ----------
+@app.get("/api/analytics")
+async def get_analytics(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        ApplicationTable.__table__.select().where(
+            ApplicationTable.user_id == current_user["sub"]
+        ).order_by(ApplicationTable.applied_date)
+    )
+    apps = result.fetchall()
+    apps_list = [dict(app._mapping) for app in apps]
+
+    status_counts = {}
+    for app in apps_list:
+        status = app.get("status", "Unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    date_counts = {}
+    for app in apps_list:
+        date = app.get("applied_date", "")[:7]
+        if date:
+            date_counts[date] = date_counts.get(date, 0) + 1
+
+    company_counts = {}
+    for app in apps_list:
+        company = app.get("company", "Unknown")
+        company_counts[company] = company_counts.get(company, 0) + 1
+
+    top_companies = sorted(company_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    return {
+        "total_applications": len(apps_list),
+        "status_distribution": status_counts,
+        "applications_over_time": [
+            {"month": month, "count": count}
+            for month, count in sorted(date_counts.items())
+        ],
+        "top_companies": [
+            {"company": company, "count": count}
+            for company, count in top_companies
+        ],
+        "offer_rate": round(
+            status_counts.get("Offer", 0) / len(apps_list) * 100
+            if apps_list else 0, 1
         )
-        if resp.status_code != 200:
-            return []  # fallback
-        data = resp.json()
-    return data.get("data", [])
+    }
 # uvicorn main:app --reload --port 8000
