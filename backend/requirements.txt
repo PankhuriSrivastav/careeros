@@ -2,7 +2,6 @@ fastapi
 uvicorn
 sqlalchemy
 asyncpg
-psycopg2-binary
 supabase
 python-jose[cryptography]
 passlib[bcrypt]
@@ -13,4 +12,4 @@ email-validator
 python-multipart
 google-genai
 alembic
-psycopg2-binary
+duckduckgo-search>=4.1.1
