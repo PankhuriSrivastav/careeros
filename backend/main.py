@@ -19,7 +19,10 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from PyPDF2 import PdfReader
 from collections import Counter
-from duckduckgo_search import DDGS   # pip install duckduckgo-search
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS  # legacy fallback
 import httpx
 
 load_dotenv()
@@ -453,71 +456,249 @@ Output:"""
         print(f"Gemini skill extraction error: {e}")
         return text_skills, "text_scan"
 
+LOW_VALUE_SEARCH_DOMAINS = {
+    "wikipedia.org",
+    "geeksforgeeks.org",
+    "youtube.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+}
+
+def _parse_ddg_result(row: dict) -> Optional[dict]:
+    url = row.get("href", "") or row.get("link", "") or row.get("url", "")
+    if not url:
+        return None
+    return {
+        "title": row.get("title", ""),
+        "snippet": row.get("body", "") or row.get("snippet", "") or row.get("description", ""),
+        "url": url,
+    }
+
+def _run_ddg_search(query: str, region: str, max_results: int, timelimit: Optional[str] = None) -> List[dict]:
+    results: List[dict] = []
+    kwargs = {
+        "keywords": query,
+        "region": region,
+        "safesearch": "moderate",
+        "max_results": max_results,
+    }
+    if timelimit:
+        kwargs["timelimit"] = timelimit
+
+    # Prefer new `ddgs` package (works reliably on servers)
+    try:
+        client = DDGS()
+        rows = client.text(**kwargs)
+        if hasattr(rows, "__iter__") and not isinstance(rows, list):
+            rows = list(rows)
+        for row in rows or []:
+            parsed = _parse_ddg_result(row)
+            if parsed:
+                results.append(parsed)
+        if results:
+            return results
+    except TypeError:
+        pass
+
+    # Legacy duckduckgo-search: html backend required (auto returns empty)
+    with DDGS() as ddgs:
+        legacy_kwargs = dict(kwargs)
+        legacy_kwargs["backend"] = "html"
+        for row in ddgs.text(**legacy_kwargs):
+            parsed = _parse_ddg_result(row)
+            if parsed:
+                results.append(parsed)
+    return results
+
 async def search_duckduckgo(query: str, max_results: int = 10) -> List[dict]:
-    """
-    Search using DuckDuckGo — completely free, no API key, no signup.
-    Returns list of {title, snippet, url} dicts — same format as before.
-    """
+    """Search DuckDuckGo for job/internship listings (free, no API key)."""
     try:
         loop = asyncio.get_running_loop()
-        
-        def _search():
-            results = []
-            with DDGS() as ddgs:
-                for r in ddgs.text(
-                    query,
-                    region="in-en",     # India-biased results
-                    safesearch="off",
-                    timelimit="m",       # Past month
-                    max_results=max_results
-                ):
-                    results.append({
-                        "title": r.get("title", ""),
-                        "snippet": r.get("body", ""),   # DDG uses 'body' not 'snippet'
-                        "url": r.get("href", "")         # DDG uses 'href' not 'link'
-                    })
-            return results
-        
-        return await loop.run_in_executor(None, _search)
-    
+        for region, timelimit in [("in-en", None), ("wt-wt", None), ("in-en", "y")]:
+            results = await loop.run_in_executor(
+                None, lambda r=region, t=timelimit: _run_ddg_search(query, r, max_results, t)
+            )
+            filtered = [
+                r for r in results
+                if not any(d in r["url"].lower() for d in LOW_VALUE_SEARCH_DOMAINS)
+            ]
+            if filtered:
+                return filtered
+            if results:
+                return results
+        return []
     except Exception as e:
-        print(f"DuckDuckGo search error: {e}")
+        print(f"DuckDuckGo search error for '{query[:60]}...': {e}")
         return []
 
-def build_opportunity_queries(
-    keywords: List[str],
-    opportunity_type: str = "all"
-) -> List[str]:
-    """
-    Build targeted search queries for each platform.
-    Uses site: operator which DuckDuckGo supports perfectly.
-    """
-    top_keywords = keywords[:3] if keywords else ["software", "engineering"]
-    kw_string = " ".join(f'"{kw}"' for kw in top_keywords)
+VALID_OPPORTUNITY_TYPES = {
+    "all",
+    "internship",
+    "internship_software",
+    "internship_ai_ml",
+    "internship_data",
+    "internship_web",
+    "internship_mobile",
+    "internship_devops",
+    "hackathon",
+    "job",
+    "job_fresher",
+}
 
-    queries = []
+# Maps filter -> extra search phrases appended to resume keywords
+OPPORTUNITY_CATEGORY_TERMS = {
+    "internship": ["internship"],
+    "internship_software": ["software development internship", "SDE intern", "backend intern"],
+    "internship_ai_ml": ["AI internship", "machine learning intern", "deep learning intern"],
+    "internship_data": ["data science internship", "data analyst intern"],
+    "internship_web": ["web development internship", "frontend intern", "full stack intern"],
+    "internship_mobile": ["android internship", "mobile app development intern", "iOS intern"],
+    "internship_devops": ["devops internship", "cloud engineering intern", "SRE intern"],
+    "hackathon": ["hackathon", "coding competition"],
+    "job": ["fresher job", "graduate job"],
+    "job_fresher": ["fresher", "entry level", "graduate trainee"],
+}
 
-    if opportunity_type in ["all", "internship"]:
+def resolve_resume_keywords(latest_resume: UserResumeTable) -> List[str]:
+    """Use stored keywords and refresh from resume text when possible."""
+    stored = [kw.strip() for kw in (latest_resume.keywords or "").split(",") if kw.strip()]
+    if latest_resume.resume_text:
+        refreshed = extract_skills_from_text(latest_resume.resume_text)
+        merged = merge_skill_lists(stored, refreshed)
+        if merged:
+            return merged[:15]
+    return stored
+
+def _keyword_search_fragment(keywords: List[str]) -> str:
+    top = keywords[:3] if keywords else ["software", "developer"]
+    return " ".join(top)
+
+def build_opportunity_queries(keywords: List[str], opportunity_type: str = "all") -> List[str]:
+    """
+    Build targeted search queries for each platform and category filter.
+    """
+    if opportunity_type not in VALID_OPPORTUNITY_TYPES:
+        opportunity_type = "all"
+
+    kw = _keyword_search_fragment(keywords)
+    category_terms = OPPORTUNITY_CATEGORY_TERMS.get(opportunity_type, [])
+    category_phrase = " ".join(category_terms[:2]) if category_terms else ""
+    search_terms = f"{kw} {category_phrase}".strip()
+
+    queries: List[str] = []
+    year = datetime.utcnow().year
+
+    internship_types = {
+        "all",
+        "internship",
+        "internship_software",
+        "internship_ai_ml",
+        "internship_data",
+        "internship_web",
+        "internship_mobile",
+        "internship_devops",
+    }
+    if opportunity_type in internship_types:
         queries.extend([
-            f'site:internshala.com internship {kw_string} India 2026',
-            f'site:unstop.com internship {kw_string} 2026',
-            f'site:linkedin.com/jobs internship {kw_string} India',
-            f'site:wellfound.com jobs internship {kw_string}',
+            f"site:internshala.com internship {search_terms} India {year}",
+            f"site:unstop.com internship {search_terms} {year}",
+            f"site:linkedin.com/jobs internship {search_terms} India",
+            f"site:wellfound.com internship {search_terms}",
         ])
 
     if opportunity_type in ["all", "hackathon"]:
         queries.extend([
-            f'site:unstop.com hackathon {kw_string} 2026',
-            f'site:hackerearth.com challenge {kw_string} 2026',
+            f"site:unstop.com hackathon {search_terms} {year}",
+            f"site:hackerearth.com hackathon {search_terms} {year}",
+            f"site:devfolio.co hackathon {search_terms}",
         ])
 
-    if opportunity_type in ["all", "job"]:
+    job_types = {"all", "job", "job_fresher"}
+    if opportunity_type in job_types:
         queries.extend([
-            f'site:naukri.com job {kw_string} fresher India',
-            f'site:linkedin.com/jobs {kw_string} "fresher" OR "entry level" India',
+            f"site:naukri.com fresher {search_terms} India",
+            f"site:linkedin.com/jobs {search_terms} fresher India",
         ])
 
-    return queries
+    if opportunity_type == "all":
+        queries.extend([
+            f"internship {search_terms} India {year}",
+            f"fresher {search_terms} job India",
+        ])
+
+    return queries[:12]
+
+def build_fallback_opportunity_queries(keywords: List[str], opportunity_type: str) -> List[str]:
+    """Broader queries when platform-specific searches return nothing."""
+    kw = _keyword_search_fragment(keywords)
+    year = datetime.utcnow().year
+    category = " ".join(OPPORTUNITY_CATEGORY_TERMS.get(opportunity_type, ["internship"])[:1])
+
+    return [
+        f"{category} {kw} India {year}",
+        f"{kw} internship openings India students",
+        f"{kw} fresher hiring India",
+        f"internshala {kw} internship",
+        f"unstop {category} {kw}",
+    ]
+
+async def collect_search_results(queries: List[str], max_per_query: int = 8) -> List[dict]:
+    """Run DuckDuckGo queries in parallel and dedupe by URL."""
+    if not queries:
+        return []
+
+    batches = await asyncio.gather(
+        *[search_duckduckgo(q, max_results=max_per_query) for q in queries],
+        return_exceptions=True,
+    )
+
+    all_raw: List[dict] = []
+    seen_urls: set = set()
+    for batch in batches:
+        if isinstance(batch, Exception):
+            print(f"Query batch error: {batch}")
+            continue
+        for item in batch:
+            url = item.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                all_raw.append(item)
+    return all_raw
+
+def score_opportunity_results(
+    raw_results: List[dict],
+    resume_keywords: List[str],
+    opportunity_type: str,
+    min_trust: int = 15,
+) -> List[dict]:
+    scored_results = []
+    for item in raw_results:
+        title = item.get("title", "")
+        snippet = item.get("snippet", "")
+        url = item.get("url", "")
+        if not url:
+            continue
+
+        match_percent = calculate_match_from_snippet(resume_keywords, title, snippet)
+        trust_score = calculate_trust_score(title, snippet, url)
+        if trust_score < min_trust:
+            continue
+
+        scored_results.append({
+            "title": title,
+            "snippet": snippet,
+            "url": url,
+            "platform": detect_platform(url),
+            "match_percent": match_percent,
+            "trust_score": trust_score,
+            "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
+            "opportunity_type": opportunity_type,
+        })
+
+    scored_results.sort(key=lambda x: (x["match_percent"], x["trust_score"]), reverse=True)
+    return scored_results
 
 async def generate_study_plan_with_gemini(
     weak_topics: List[dict],
@@ -836,72 +1017,72 @@ async def get_job_description_by_company_role(
 # ---------- Opportunity Finder (DuckDuckGo) ----------
 @app.get("/api/opportunities/search")
 async def search_opportunities(
-    opportunity_type: str = Query(default="all", description="all, internship, hackathon, job"),
+    opportunity_type: str = Query(
+        default="all",
+        description=(
+            "all, internship, internship_software, internship_ai_ml, internship_data, "
+            "internship_web, internship_mobile, internship_devops, hackathon, job, job_fresher"
+        ),
+    ),
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Step 1 — Get student's resume keywords
+    if opportunity_type not in VALID_OPPORTUNITY_TYPES:
+        opportunity_type = "all"
+
     stmt = select(UserResumeTable).where(
         UserResumeTable.user_id == current_user["sub"]
     ).order_by(desc(UserResumeTable.created_at))
     result = await db.execute(stmt)
     latest_resume = result.scalars().first()
 
-    if not latest_resume or not latest_resume.keywords:
+    if not latest_resume:
         raise HTTPException(
-            400,
-            "No resume found. Upload your resume first so we can find matching opportunities."
+            status_code=400,
+            detail="No resume found. Upload your resume in the Resume Analyzer tab first.",
         )
 
-    resume_keywords = [kw.strip() for kw in latest_resume.keywords.split(",") if kw.strip()]
+    resume_keywords = resolve_resume_keywords(latest_resume)
+    if not resume_keywords:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read skills from your resume. Re-upload a text-based PDF in Resume Analyzer.",
+        )
 
-    # Step 2 — Build queries
     queries = build_opportunity_queries(resume_keywords, opportunity_type)
+    all_raw_results = await collect_search_results(queries)
+    used_fallback = False
 
-    # Step 3 — Run queries concurrently and collect results
-    all_raw_results = []
-    seen_urls = set()
+    if not all_raw_results:
+        used_fallback = True
+        fallback_queries = build_fallback_opportunity_queries(resume_keywords, opportunity_type)
+        all_raw_results = await collect_search_results(fallback_queries)
 
-    for query in queries:
-        raw = await search_duckduckgo(query, max_results=10)
-        for item in raw:
-            url = item["url"]
-            if url not in seen_urls:
-                seen_urls.add(url)
-                all_raw_results.append(item)
+    scored_results = score_opportunity_results(all_raw_results, resume_keywords, opportunity_type)
 
-    # Step 4 — Score each result
-    scored_results = []
-    for item in all_raw_results:
-        title = item["title"]
-        snippet = item["snippet"]
-        url = item["url"]
+    if not scored_results and all_raw_results:
+        scored_results = score_opportunity_results(
+            all_raw_results, resume_keywords, opportunity_type, min_trust=0
+        )
 
-        match_percent = calculate_match_from_snippet(resume_keywords, title, snippet)
-        trust_score = calculate_trust_score(title, snippet, url)
-        platform = detect_platform(url)
-
-        if trust_score < 20:
-            continue
-
-        scored_results.append({
-            "title": title,
-            "snippet": snippet,
-            "url": url,
-            "platform": platform,
-            "match_percent": match_percent,
-            "trust_score": trust_score,
-            "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
-            "opportunity_type": opportunity_type
-        })
-
-    scored_results.sort(key=lambda x: x["match_percent"], reverse=True)
+    message = None
+    if not scored_results:
+        if not all_raw_results:
+            message = (
+                "Search returned no listings right now. This can happen when job sites block "
+                "automated search — try again in a few minutes or switch the category filter."
+            )
+        else:
+            message = "Results were found but filtered as low trust. Try the Internships filter."
 
     return {
         "results": scored_results[:20],
         "total": len(scored_results),
-        "keywords_used": resume_keywords[:5],
-        "disclaimer": "Results sourced via DuckDuckGo (free, no API key). Verify on the platform before applying."
+        "keywords_used": resume_keywords[:8],
+        "opportunity_type": opportunity_type,
+        "used_fallback": used_fallback,
+        "message": message,
+        "disclaimer": "Results sourced via DuckDuckGo. Verify on the platform before applying.",
     }
 
 @app.post("/api/opportunities/track")

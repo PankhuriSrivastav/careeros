@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://careeros-backend-asbs.onrender.com';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://careeros-backend-asbs.onrender.com';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -107,6 +107,31 @@ export const apiService = {
   // Job description matching
   async matchJob(jobDescription: string): Promise<any> {
     const response = await api.post('/job/match', { job_description: jobDescription });
+    return response.data;
+  },
+
+  async searchOpportunities(opportunityType: string) {
+    const response = await api.get('/api/opportunities/search', {
+      params: { opportunity_type: opportunityType },
+    });
+    return response.data;
+  },
+
+  async getSavedOpportunities() {
+    const response = await api.get('/api/opportunities/saved');
+    return response.data;
+  },
+
+  async trackOpportunity(payload: {
+    company_name: string;
+    role: string;
+    source_url: string;
+    source_platform?: string | null;
+    description?: string;
+    trust_score?: number;
+    match_percent?: number;
+  }) {
+    const response = await api.post('/api/opportunities/track', payload);
     return response.data;
   },
 };
