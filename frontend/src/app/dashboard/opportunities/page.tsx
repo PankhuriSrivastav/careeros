@@ -46,6 +46,7 @@ interface SearchResponse {
   used_fallback?: boolean;
   message?: string | null;
   disclaimer?: string;
+  sources?: Record<string, number>;
 }
 
 const FILTER_OPTIONS = [
@@ -72,6 +73,7 @@ export default function OpportunityFinderPage() {
   const [keywordsUsed, setKeywordsUsed] = useState<string[]>([]);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [sourceStats, setSourceStats] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {
     loadSavedOpportunities();
@@ -92,11 +94,13 @@ export default function OpportunityFinderPage() {
     setInfo(null);
     setHasSearched(true);
     setResults([]);
+    setSourceStats(null);
 
     try {
       const data: SearchResponse = await apiService.searchOpportunities(filter);
       setResults(data.results || []);
       setKeywordsUsed(data.keywords_used || []);
+      setSourceStats(data.sources || null);
 
       if ((data.results || []).length === 0) {
         setError(
@@ -217,9 +221,32 @@ export default function OpportunityFinderPage() {
           </div>
         )}
 
+        {sourceStats && Object.keys(sourceStats).length > 0 && (
+          <div className="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <p className="text-xs font-semibold text-indigo-900 mb-2">Data sources:</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(sourceStats).map(([source, count]) => (
+                count > 0 && (
+                  <span
+                    key={source}
+                    className="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full"
+                  >
+                    {source.replace(/_/g, ' ')}: {count}
+                  </span>
+                )
+              ))}
+            </div>
+          </div>
+        )}
+
         {info && (
           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
             {info}
+            {sourceStats && (
+              <p className="text-xs mt-1 opacity-75">
+                Aggregated from Internshala, RSS feeds, Adzuna, JSearch, and web search.
+              </p>
+            )}
           </div>
         )}
 

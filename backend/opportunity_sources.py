@@ -4,6 +4,7 @@ Aggregate real job/internship postings from multiple sources (not platform homep
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from datetime import datetime
 from typing import List, Optional, Set
@@ -279,6 +280,159 @@ async def fetch_remotive_jobs(keywords: List[str], max_jobs: int = 8) -> List[di
     return results
 
 
+async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> List[dict]:
+    """
+    Fetch from free public RSS feeds (Unstop, HackerEarth, GitHub).
+    No auth required — completely free and legal.
+    """
+    results: List[dict] = []
+    kw_lower = [k.lower() for k in keywords]
+    
+    rss_urls = [
+        "https://unstop.com/api/feeds/opportunities/rss",
+        "https://www.hackerearth.com/api/v1/challenge/feed/",
+        "https://jobs.github.com/positions.json",  # GitHub Jobs RSS as JSON
+    ]
+
+    try:
+        import feedparser
+    except ImportError:
+        print("⚠️ feedparser not installed. Install with: pip install feedparser")
+        return results
+
+    async with httpx.AsyncClient(timeout=20.0, headers=HTTP_HEADERS) as client:
+        for feed_url in rss_urls:
+            try:
+                if "github.com" in feed_url:
+                    # GitHub Jobs uses JSON, not RSS
+                    resp = await client.get(feed_url)
+                    if resp.status_code == 200:
+                        jobs = resp.json()
+                        for job in jobs[:max_items_per_feed]:
+                            title_desc = f"{job.get('title', '')} {job.get('description', '')[:200]}".lower()
+                            if any(kw in title_desc for kw in kw_lower):
+                                results.append({
+                                    "title": f"{job.get('title', 'Role')} — {job.get('company', 'Company')}",
+                                    "snippet": f"{job.get('location', 'Remote')} · Posted {job.get('created_at', '')[:10]}",
+                                    "url": job.get("url", ""),
+                                    "platform": "GitHub Jobs",
+                                    "source": "rss_github",
+                                })
+                else:
+                    resp = await client.get(feed_url)
+                    if resp.status_code == 200:
+                        feed = feedparser.parse(resp.text)
+                        for entry in feed.entries[:max_items_per_feed]:
+                            title = entry.get("title", "")
+                            summary = entry.get("summary", "")
+                            search_text = f"{title} {summary}".lower()
+                            if any(kw in search_text for kw in kw_lower):
+                                platform = "Unstop" if "unstop" in feed_url else "HackerEarth"
+                                results.append({
+                                    "title": title,
+                                    "snippet": summary[:200],
+                                    "url": entry.get("link", ""),
+                                    "platform": platform,
+                                    "source": f"rss_{platform.lower()}",
+                                })
+            except Exception as e:
+                print(f"RSS feed error ({feed_url}): {e}")
+                continue
+
+    return results
+
+
+async def fetch_adzuna_jobs(keywords: List[str], max_jobs: int = 10) -> List[dict]:
+    """
+    Adzuna API — Free tier covers Indian job market + internships.
+    No auth required for basic searches.
+    """
+    results: List[dict] = []
+    
+    # Adzuna public API endpoint — free, no key needed for limited searches
+    adzuna_url = "https://api.adzuna.com/v1/api/jobs/in/search/1"
+    
+    kw = " ".join(keywords[:2]) if keywords else "developer"
+    
+    params = {
+        "what": kw,
+        "where": "India",
+        "results_per_page": max_jobs,
+        "sort_by": "date",
+        "full_time": "1",  # 1 = include, 0 = exclude
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(adzuna_url, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                for job in data.get("results", [])[:max_jobs]:
+                    results.append({
+                        "title": f"{job.get('title', 'Role')} — {job.get('company', {}).get('display_name', 'Company')}",
+                        "snippet": job.get("description", "")[:300],
+                        "url": job.get("redirect_url", ""),
+                        "platform": "Adzuna",
+                        "source": "adzuna",
+                    })
+    except Exception as e:
+        print(f"Adzuna API error: {e}")
+
+    return results
+
+
+async def fetch_jsearch_jobs(keywords: List[str], max_jobs: int = 8) -> List[dict]:
+    """
+    JSearch API — Free tier for LinkedIn/Indeed/other job listings.
+    Provides access to major job boards without direct scraping.
+    """
+    results: List[dict] = []
+    
+    # JSearch free endpoint (RapidAPI)
+    jsearch_url = "https://jsearch.p.rapidapi.com/search"
+    
+    # Note: Free tier has limits. For production, set JSEARCH_API_KEY in .env
+    api_key = os.getenv("JSEARCH_API_KEY", "")
+    
+    if not api_key:
+        print("⚠️ JSEARCH_API_KEY not set. Skipping JSearch. Set in .env to enable free tier searches.")
+        return results
+
+    kw = " ".join(keywords[:2]) if keywords else "software developer"
+    
+    headers = {
+        "X-RapidAPI-Key": api_key,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+    }
+
+    params = {
+        "query": f"{kw} India",
+        "page": 1,
+        "num_pages": 1,
+        "date_posted": "week",  # Last week
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+            resp = await client.get(jsearch_url, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                for job in data.get("data", [])[:max_jobs]:
+                    results.append({
+                        "title": f"{job.get('job_title', 'Role')} — {job.get('employer_name', 'Company')}",
+                        "snippet": job.get("job_description", "")[:300],
+                        "url": job.get("job_apply_link", "") or job.get("job_apply_url", ""),
+                        "platform": job.get("job_publisher", "Job Board"),
+                        "source": "jsearch",
+                    })
+            else:
+                print(f"JSearch API error: status {resp.status_code}")
+    except Exception as e:
+        print(f"JSearch API error: {e}")
+
+    return results
+
+
 def _dedupe_by_url(items: List[dict]) -> List[dict]:
     seen: Set[str] = set()
     out: List[dict] = []
@@ -295,8 +449,15 @@ async def gather_opportunity_listings(
     opportunity_type: str,
 ) -> tuple[List[dict], dict]:
     """
-    Collect real postings from Internshala scraping, web search, and job APIs.
-  Returns (listings, stats).
+    Collect real postings from multiple sources:
+    - Internshala scraping
+    - RSS feeds (Unstop, HackerEarth, GitHub Jobs)
+    - Adzuna API (Indian jobs)
+    - JSearch API (broad job listings)
+    - Remotive API (remote jobs)
+    - Web search (DuckDuckGo)
+    
+    Returns (listings, stats).
     """
     tasks = []
     slugs = internshala_slugs_for_search(keywords, opportunity_type)
@@ -306,20 +467,42 @@ async def gather_opportunity_listings(
         "internship_data", "internship_web", "internship_mobile", "internship_devops",
     }
 
+    # Internshala (scrape)
     if opportunity_type in internship_types or opportunity_type == "all":
         if opportunity_type != "hackathon":
             for slug in slugs:
                 tasks.append(("internshala", fetch_internshala_listings(slug)))
 
+    # RSS feeds (free, no auth)
+    if opportunity_type in {"all"} | internship_types:
+        tasks.append(("rss_feeds", fetch_rss_feeds(keywords)))
+
+    # Adzuna (free tier, Indian jobs)
+    if opportunity_type in {"all", "job", "job_fresher"} | internship_types:
+        tasks.append(("adzuna", fetch_adzuna_jobs(keywords)))
+
+    # JSearch (free tier with API key)
+    if opportunity_type in {"all", "job", "job_fresher"} | internship_types:
+        tasks.append(("jsearch", fetch_jsearch_jobs(keywords)))
+
+    # Remotive (free API, remote jobs)
     if opportunity_type in {"all", "job", "job_fresher"} | internship_types:
         tasks.append(("remotive", fetch_remotive_jobs(keywords)))
 
+    # Web search (DuckDuckGo + detail searches)
     search_queries = build_detail_search_queries(keywords, opportunity_type)
     for q in search_queries:
         tasks.append(("web_search", search_job_postings_online(q)))
 
     results: List[dict] = []
-    stats = {"internshala": 0, "remotive": 0, "web_search": 0}
+    stats = {
+        "internshala": 0,
+        "rss_feeds": 0,
+        "adzuna": 0,
+        "jsearch": 0,
+        "remotive": 0,
+        "web_search": 0,
+    }
 
     if not tasks:
         return [], stats
