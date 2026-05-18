@@ -110,9 +110,9 @@ export const apiService = {
     return response.data;
   },
 
-  async searchOpportunities(opportunityType: string) {
+  async searchOpportunities(opportunityType: string, page: number = 1) {
     const response = await api.get('/api/opportunities/search', {
-      params: { opportunity_type: opportunityType },
+      params: { opportunity_type: opportunityType, page },
     });
     return response.data;
   },

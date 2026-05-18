@@ -42,6 +42,9 @@ interface SavedOpportunity {
 interface SearchResponse {
   results: SearchResult[];
   total: number;
+  page: number;
+  total_pages: number;
+  results_per_page: number;
   keywords_used: string[];
   opportunity_type: string;
   used_fallback?: boolean;
@@ -75,6 +78,9 @@ export default function OpportunityFinderPage() {
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [sourceStats, setSourceStats] = useState<Record<string, number> | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
 
   useEffect(() => {
     loadSavedOpportunities();
@@ -89,21 +95,26 @@ export default function OpportunityFinderPage() {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (pageNum: number = 1) => {
     setSearching(true);
     setError(null);
     setInfo(null);
-    setHasSearched(true);
-    setResults([]);
-    setSourceStats(null);
+    if (pageNum === 1) {
+      setHasSearched(true);
+      setResults([]);
+      setSourceStats(null);
+    }
 
     try {
-      const data: SearchResponse = await apiService.searchOpportunities(filter);
+      const data: SearchResponse = await apiService.searchOpportunities(filter, pageNum);
       setResults(data.results || []);
+      setCurrentPage(data.page || 1);
+      setTotalPages(data.total_pages || 1);
+      setTotalResults(data.total || 0);
       setKeywordsUsed(data.keywords_used || []);
       setSourceStats(data.sources || null);
 
-      if ((data.results || []).length === 0) {
+      if ((data.results || []).length === 0 && pageNum === 1) {
         setError(
           data.message ||
             'No matching listings found. Upload your resume in Resume Analyzer, then try another category.'
@@ -269,9 +280,11 @@ export default function OpportunityFinderPage() {
 
       {hasSearched && results.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Search Results ({results.length} of {results.length})
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Search Results ({results.length} on page {currentPage} of {totalPages} • {totalResults} total)
+            </h2>
+          </div>
           {results.map((result) => (
             <div
               key={result.url}
@@ -340,6 +353,54 @@ export default function OpportunityFinderPage() {
               </div>
             </div>
           ))}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => handleSearch(currentPage - 1)}
+                disabled={currentPage === 1 || searching}
+                className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                ← Previous
+              </button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  pageNum >= currentPage - 1 && pageNum <= currentPage + 1 ? (
+                    <button
+                      key={pageNum}
+                      onClick={() => handleSearch(pageNum)}
+                      disabled={searching}
+                      className={`px-3 py-2 text-sm font-medium rounded-lg transition ${
+                        pageNum === currentPage
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ) : pageNum === currentPage - 2 || pageNum === currentPage + 2 ? (
+                    <span key={pageNum} className="px-2 py-2 text-gray-400">
+                      ...
+                    </span>
+                  ) : null
+                ))}
+              </div>
+
+              <button
+                onClick={() => handleSearch(currentPage + 1)}
+                disabled={currentPage === totalPages || searching}
+                className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Next →
+              </button>
+
+              <span className="ml-4 text-xs text-gray-500">
+                Page {currentPage} of {totalPages}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

@@ -395,7 +395,9 @@ def is_opportunity_closed(title: str, snippet: str) -> bool:
         "closed", "registration closed", "applications closed", "registration ended",
         "applications ended", "hiring complete", "positions filled", "no longer accepting",
         "deadline passed", "expired", "ended", "closed on", "registration deadline passed",
-        "not accepting applications", "unfortunately closed"
+        "not accepting applications", "unfortunately closed", "applications over",
+        "registrations closed", "no more applications", "recruitment closed",
+        "position filled", "internship closed"
     ]
     
     return any(indicator in text for indicator in closed_indicators)
@@ -404,21 +406,30 @@ def extract_registration_deadline(title: str, snippet: str) -> Optional[str]:
     """
     Extract registration/application deadline from title and snippet.
     Returns date string or None if not found.
+    Works for both open and closed opportunities.
     """
     import re
     text = f"{title} {snippet}"
     
-    # Pattern: "Deadline: May 31", "Apply by: June 15", "Registration closes: May 20", etc.
+    # Enhanced patterns to catch various deadline formats
     patterns = [
-        r"(?:deadline|closes?|apply by|register by|registration closes?)[\s:]*([a-z]+\s+\d{1,2})",
-        r"(?:deadline|closes?|apply by|register by|registration closes?)[\s:]*(\d{1,2}[/-]\d{1,2})",
-        r"(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december))",
+        # "Deadline: May 31", "Closes: June 15"
+        r"(?:deadline|closes?|apply by|register by|registration closes?|last date)[\s:]*([a-z]+\s+\d{1,2}(?:\s*,?\s*\d{4})?)",
+        # "31-05-2024" or "31/5/2024" or "5-31"
+        r"(?:deadline|closes?|apply by|register by|registration closes?|last date)[\s:]*(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)",
+        # Bare dates: "May 31", "15 June", "31st May"
+        r"\b(\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)(?:\s+\d{4})?)\b",
+        # "May 31" variant
+        r"\b((?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+\d{1,2}(?:\s*,?\s*\d{4})?)\b",
     ]
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            date_str = match.group(1).strip()
+            # Clean up the date string
+            date_str = re.sub(r'\s+', ' ', date_str)  # Remove extra spaces
+            return date_str
     
     return None
 
@@ -1181,6 +1192,7 @@ async def search_opportunities(
             "internship_web, internship_mobile, internship_devops, hackathon, job, job_fresher"
         ),
     ),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1225,18 +1237,34 @@ async def search_opportunities(
         )
     elif source_stats.get("internshala", 0) > 0:
         message = (
-            f"Found {len(scored_results)} openings matched to your skills — "
+            f"Found {len(scored_results)} live openings matched to your skills — "
             "including live Internshala postings you can apply to directly."
         )
 
+    # Pagination: 15 results per page
+    results_per_page = 15
+    total_results = len(scored_results)
+    total_pages = (total_results + results_per_page - 1) // results_per_page
+    
+    # Validate page number
+    if page > total_pages and total_pages > 0:
+        page = total_pages
+    
+    start_idx = (page - 1) * results_per_page
+    end_idx = start_idx + results_per_page
+    paginated_results = scored_results[start_idx:end_idx]
+
     return {
-        "results": scored_results[:50],
-        "total": len(scored_results),
+        "results": paginated_results,
+        "total": total_results,
+        "page": page,
+        "total_pages": total_pages,
+        "results_per_page": results_per_page,
         "keywords_used": resume_keywords[:8],
         "opportunity_type": opportunity_type,
         "sources": source_stats,
         "message": message,
-        "disclaimer": "Listings are aggregated from the web. Always verify details on the original site before applying.",
+        "disclaimer": "Listings are aggregated from the web. Only showing live opportunities with open registration. Always verify details on the original site before applying.",
     }
 
 @app.post("/api/opportunities/track")
