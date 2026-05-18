@@ -222,6 +222,104 @@ class TrackOpportunityRequest(BaseModel):
     match_percent: Optional[int] = 0
 
 # ---------- Helper Functions ----------
+IDEAL_SKILLS = {
+    "python", "react", "mongodb", "express", "nodejs", "git",
+    "docker", "aws", "javascript", "typescript",
+}
+
+SKILL_ALIASES = {
+    "python": ["python"],
+    "react": ["react", "next.js", "nextjs"],
+    "mongodb": ["mongodb", "mongo"],
+    "express": ["express"],
+    "nodejs": ["nodejs", "node.js", "node js"],
+    "git": ["git", "github"],
+    "docker": ["docker"],
+    "aws": ["aws"],
+    "javascript": ["javascript"],
+    "typescript": ["typescript"],
+}
+
+# Display name -> lowercase aliases scanned in resume text
+RESUME_SKILL_CATALOG = [
+    ("Python", ["python"]),
+    ("JavaScript", ["javascript"]),
+    ("TypeScript", ["typescript"]),
+    ("C++", ["c++"]),
+    ("Java", ["java"]),
+    ("React", ["react"]),
+    ("Next.js", ["next.js", "nextjs"]),
+    ("Node.js", ["node.js", "nodejs"]),
+    ("Express", ["express"]),
+    ("FastAPI", ["fastapi"]),
+    ("SQLAlchemy", ["sqlalchemy"]),
+    ("PostgreSQL", ["postgresql", "postgres"]),
+    ("MongoDB", ["mongodb", "mongo"]),
+    ("Supabase", ["supabase"]),
+    ("SQL", [" sql", "sql "]),
+    ("HTML", ["html"]),
+    ("CSS", ["css"]),
+    ("Tailwind CSS", ["tailwind"]),
+    ("Git", ["git", "github"]),
+    ("Docker", ["docker"]),
+    ("AWS", ["aws"]),
+    ("Vercel", ["vercel"]),
+    ("Render", ["render"]),
+    ("Gemini", ["gemini"]),
+    ("Machine Learning", ["machine learning"]),
+]
+
+def _skill_alias_present(alias: str, haystack: str) -> bool:
+    alias = alias.strip().lower()
+    if not alias:
+        return False
+    if alias.startswith(" "):
+        return alias in haystack
+    pattern = r"(?<![a-z0-9+.#\-])" + re.escape(alias) + r"(?![a-z0-9+.#\-])"
+    return bool(re.search(pattern, haystack, re.IGNORECASE))
+
+def extract_skills_from_text(text: str) -> List[str]:
+    """Detect known tech skills from resume text (used when Gemini is unavailable)."""
+    haystack = f" {text.lower()} "
+    found: List[str] = []
+    seen: set = set()
+    for display_name, aliases in RESUME_SKILL_CATALOG:
+        if any(_skill_alias_present(alias, haystack) for alias in aliases):
+            key = display_name.lower()
+            if key not in seen:
+                seen.add(key)
+                found.append(display_name)
+    return found
+
+def merge_skill_lists(*lists: List[str]) -> List[str]:
+    merged: List[str] = []
+    seen: set = set()
+    for skills in lists:
+        for skill in skills:
+            key = skill.strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                merged.append(skill.strip())
+    return merged
+
+def calculate_resume_ats_score(keywords: List[str], text: str):
+    """
+    Score resume against a common full-stack ideal stack.
+    Matches against extracted keywords AND full resume text so skills
+    listed in the PDF still count when Gemini is unavailable.
+    """
+    haystack = text.lower() + " " + " ".join(k.lower() for k in keywords)
+    matched: List[str] = []
+    missing: List[str] = []
+    for skill in sorted(IDEAL_SKILLS):
+        aliases = SKILL_ALIASES.get(skill, [skill])
+        if any(_skill_alias_present(alias, haystack) for alias in aliases):
+            matched.append(skill)
+        else:
+            missing.append(skill)
+    score = max(0, 100 - len(missing) * 8)
+    return score, matched, missing
+
 def extract_keywords(text: str, top_n: int = 20):
     words = text.lower().split()
     stopwords = {
@@ -309,12 +407,16 @@ def calculate_match_from_snippet(resume_keywords: List[str], title: str, snippet
     matched = [kw for kw in resume_keywords if kw.lower() in combined_text]
     return int((len(matched) / len(resume_keywords)) * 100) if resume_keywords else 0
 
-async def extract_skills_with_gemini(text: str) -> List[str]:
+async def extract_skills_with_gemini(text: str) -> tuple[List[str], str]:
     """
-    Extract specific technical skills from resume or JD text using Gemini.
+    Extract technical skills from resume text.
+    Returns (skills, source) where source is 'gemini' or 'text_scan'.
+    Always merges text-based detection so keywords stay accurate without AI.
     """
+    text_skills = extract_skills_from_text(text)
+
     if genai_client is None:
-        return extract_keywords(text, top_n=15)
+        return text_skills, "text_scan"
 
     try:
         prompt = f"""
@@ -344,11 +446,12 @@ Output:"""
                 "backend", "frontend", "architecture", "work", "support",
                 "knowledge", "understanding", "models", "optimize", "api", "apis"
             }
-            return [s for s in skills if s.lower() not in banned][:15]
-        return extract_keywords(text, top_n=15)
+            gemini_skills = [s for s in skills if s.lower() not in banned][:15]
+            return merge_skill_lists(gemini_skills, text_skills), "gemini"
+        return text_skills, "text_scan"
     except Exception as e:
         print(f"Gemini skill extraction error: {e}")
-        return extract_keywords(text, top_n=15)
+        return text_skills, "text_scan"
 
 async def search_duckduckgo(query: str, max_results: int = 10) -> List[dict]:
     """
@@ -586,14 +689,14 @@ async def analyze_resume(
     pdf = PdfReader(io.BytesIO(content))
     text = "".join(page.extract_text() or "" for page in pdf.pages)
 
-    keywords = await extract_skills_with_gemini(text)
+    if len(text.strip()) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read enough text from this PDF. Export a text-based PDF (not a scanned image) and try again.",
+        )
 
-    ideal_skills = {
-        "python", "react", "mongodb", "express", "nodejs", "git",
-        "docker", "aws", "javascript", "typescript"
-    }
-    missing = [skill for skill in ideal_skills if skill not in [k.lower() for k in keywords]]
-    score = max(0, 100 - len(missing) * 8)
+    keywords, analysis_source = await extract_skills_with_gemini(text)
+    score, matched, missing = calculate_resume_ats_score(keywords, text)
 
     new_resume = UserResumeTable(
         user_id=current_user["sub"],
@@ -606,8 +709,10 @@ async def analyze_resume(
     return {
         "score": score,
         "keywords": keywords,
+        "matched": matched,
         "missing": missing,
-        "text_preview": text[:500]
+        "text_preview": text[:500],
+        "analysis_source": analysis_source,
     }
 
 @app.post("/job/match")
@@ -658,7 +763,7 @@ async def create_job_description(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    extracted_skills = await extract_skills_with_gemini(jd_data.job_description)
+    extracted_skills, _ = await extract_skills_with_gemini(jd_data.job_description)
 
     try:
         user_uuid = uuid.UUID(current_user["sub"])

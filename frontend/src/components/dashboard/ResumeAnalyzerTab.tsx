@@ -93,30 +93,71 @@ export default function ResumeAnalyzerTab({ onAnalyze }: ResumeAnalyzerTabProps)
       {result && (
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h2 className="text-xl font-bold mb-4">Analysis Results</h2>
-          
+
           <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-600">ATS Compatibility Score</span>
               <span className="text-2xl font-bold text-blue-600">{result.score}/100</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${result.score}%` }} />
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all"
+                style={{ width: `${result.score}%` }}
+              />
             </div>
+            <p className="text-sm text-gray-500 mt-2">
+              {result.score >= 80
+                ? 'Excellent! Your resume is well-optimized.'
+                : result.score >= 60
+                ? 'Good, but there is room for improvement.'
+                : 'Consider adding more relevant keywords and skills.'}
+            </p>
+            {result.analysis_source && (
+              <p className="text-xs text-gray-400 mt-1">
+                Skills detected via{' '}
+                {result.analysis_source === 'gemini' ? 'Gemini AI + resume scan' : 'resume text scan'}
+              </p>
+            )}
           </div>
+
+          {result.matched?.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                Matched Core Skills
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {result.matched.map((skill: string, idx: number) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm capitalize"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mb-6">
             <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              Extracted Keywords
+              <CheckCircle className="w-5 h-5 text-blue-500" />
+              Extracted Skills
             </h3>
             <div className="flex flex-wrap gap-2">
-              {result.keywords.map((kw: string, idx: number) => (
-                <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">{kw}</span>
-              ))}
+              {result.keywords?.length > 0 ? (
+                result.keywords.map((kw: string, idx: number) => (
+                  <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                    {kw}
+                  </span>
+                ))
+              ) : (
+                <span className="text-sm text-gray-500">No skills detected — check your PDF is text-based.</span>
+              )}
             </div>
           </div>
 
-          {result.missing && result.missing.length > 0 && (
+          {result.missing?.length > 0 && (
             <div className="mb-6">
               <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-orange-500" />
@@ -124,9 +165,17 @@ export default function ResumeAnalyzerTab({ onAnalyze }: ResumeAnalyzerTabProps)
               </h3>
               <div className="flex flex-wrap gap-2">
                 {result.missing.map((skill: string, idx: number) => (
-                  <span key={idx} className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm">{skill}</span>
+                  <span
+                    key={idx}
+                    className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm capitalize"
+                  >
+                    {skill}
+                  </span>
                 ))}
               </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Add these to your skills section if you have experience with them.
+              </p>
             </div>
           )}
         </div>

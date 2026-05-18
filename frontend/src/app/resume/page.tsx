@@ -134,21 +134,52 @@ export default function ResumePage() {
                   ? 'Good, but there is room for improvement.'
                   : 'Consider adding more relevant keywords and skills.'}
               </p>
+              {result.analysis_source && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Skills detected via{' '}
+                  {result.analysis_source === 'gemini' ? 'Gemini AI + resume scan' : 'resume text scan'}
+                </p>
+              )}
             </div>
+
+            {result.matched?.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  Matched Core Skills
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {result.matched.map((skill: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm capitalize"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mb-6">
               <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                Extracted Keywords
+                <CheckCircle className="w-5 h-5 text-blue-500" />
+                Extracted Skills
               </h3>
               <div className="flex flex-wrap gap-2">
-                {result.keywords.map((kw: string, idx: number) => (
-                  <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">{kw}</span>
-                ))}
+                {result.keywords?.length > 0 ? (
+                  result.keywords.map((kw: string, idx: number) => (
+                    <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                      {kw}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-gray-500">No skills detected — check your PDF is text-based.</span>
+                )}
               </div>
             </div>
 
-            {result.missing && result.missing.length > 0 && (
+            {result.missing?.length > 0 && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-orange-500" />
@@ -156,7 +187,12 @@ export default function ResumePage() {
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {result.missing.map((skill: string, idx: number) => (
-                    <span key={idx} className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm">{skill}</span>
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm capitalize"
+                    >
+                      {skill}
+                    </span>
                   ))}
                 </div>
                 <p className="text-sm text-gray-500 mt-2">
