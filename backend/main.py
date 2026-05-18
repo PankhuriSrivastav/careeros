@@ -24,6 +24,7 @@ try:
 except ImportError:
     from duckduckgo_search import DDGS  # legacy fallback
 import httpx
+from urllib.parse import quote_plus
 
 load_dotenv()
 
@@ -487,29 +488,31 @@ def _run_ddg_search(query: str, region: str, max_results: int, timelimit: Option
     if timelimit:
         kwargs["timelimit"] = timelimit
 
-    # Prefer new `ddgs` package (works reliably on servers)
     try:
         client = DDGS()
         rows = client.text(**kwargs)
-        if hasattr(rows, "__iter__") and not isinstance(rows, list):
-            rows = list(rows)
-        for row in rows or []:
+        rows = list(rows) if rows is not None else []
+        for row in rows:
             parsed = _parse_ddg_result(row)
             if parsed:
                 results.append(parsed)
         if results:
             return results
-    except TypeError:
-        pass
+    except Exception as e:
+        print(f"ddgs package search failed: {e}")
 
-    # Legacy duckduckgo-search: html backend required (auto returns empty)
-    with DDGS() as ddgs:
-        legacy_kwargs = dict(kwargs)
-        legacy_kwargs["backend"] = "html"
-        for row in ddgs.text(**legacy_kwargs):
-            parsed = _parse_ddg_result(row)
-            if parsed:
-                results.append(parsed)
+    try:
+        from duckduckgo_search import DDGS as LegacyDDGS
+        with LegacyDDGS() as ddgs:
+            legacy_kwargs = dict(kwargs)
+            legacy_kwargs["backend"] = "html"
+            for row in ddgs.text(**legacy_kwargs):
+                parsed = _parse_ddg_result(row)
+                if parsed:
+                    results.append(parsed)
+    except Exception as e:
+        print(f"legacy duckduckgo-search failed: {e}")
+
     return results
 
 async def search_duckduckgo(query: str, max_results: int = 10) -> List[dict]:
@@ -576,73 +579,179 @@ def _keyword_search_fragment(keywords: List[str]) -> str:
     return " ".join(top)
 
 def build_opportunity_queries(keywords: List[str], opportunity_type: str = "all") -> List[str]:
-    """
-    Build targeted search queries for each platform and category filter.
-    """
+    """Short, proven DuckDuckGo queries (long site: queries often return 0 on servers)."""
     if opportunity_type not in VALID_OPPORTUNITY_TYPES:
         opportunity_type = "all"
 
     kw = _keyword_search_fragment(keywords)
-    category_terms = OPPORTUNITY_CATEGORY_TERMS.get(opportunity_type, [])
-    category_phrase = " ".join(category_terms[:2]) if category_terms else ""
-    search_terms = f"{kw} {category_phrase}".strip()
-
-    queries: List[str] = []
     year = datetime.utcnow().year
+    queries: List[str] = []
 
     internship_types = {
-        "all",
-        "internship",
-        "internship_software",
-        "internship_ai_ml",
-        "internship_data",
-        "internship_web",
-        "internship_mobile",
-        "internship_devops",
+        "all", "internship", "internship_software", "internship_ai_ml",
+        "internship_data", "internship_web", "internship_mobile", "internship_devops",
     }
+
     if opportunity_type in internship_types:
         queries.extend([
-            f"site:internshala.com internship {search_terms} India {year}",
-            f"site:unstop.com internship {search_terms} {year}",
-            f"site:linkedin.com/jobs internship {search_terms} India",
-            f"site:wellfound.com internship {search_terms}",
+            f"internshala {kw} internship India {year}",
+            f"unstop {kw} internship India",
+            f"linkedin {kw} internship India",
+            f"{kw} internship India students",
         ])
 
     if opportunity_type in ["all", "hackathon"]:
         queries.extend([
-            f"site:unstop.com hackathon {search_terms} {year}",
-            f"site:hackerearth.com hackathon {search_terms} {year}",
-            f"site:devfolio.co hackathon {search_terms}",
+            f"unstop hackathon {kw} {year}",
+            f"hackerearth hackathon {kw}",
         ])
 
-    job_types = {"all", "job", "job_fresher"}
-    if opportunity_type in job_types:
+    if opportunity_type in {"all", "job", "job_fresher"}:
         queries.extend([
-            f"site:naukri.com fresher {search_terms} India",
-            f"site:linkedin.com/jobs {search_terms} fresher India",
+            f"naukri {kw} fresher job India",
+            f"linkedin {kw} fresher India",
         ])
 
-    if opportunity_type == "all":
-        queries.extend([
-            f"internship {search_terms} India {year}",
-            f"fresher {search_terms} job India",
-        ])
-
-    return queries[:12]
+    return queries[:8]
 
 def build_fallback_opportunity_queries(keywords: List[str], opportunity_type: str) -> List[str]:
-    """Broader queries when platform-specific searches return nothing."""
     kw = _keyword_search_fragment(keywords)
-    year = datetime.utcnow().year
-    category = " ".join(OPPORTUNITY_CATEGORY_TERMS.get(opportunity_type, ["internship"])[:1])
-
     return [
-        f"{category} {kw} India {year}",
-        f"{kw} internship openings India students",
-        f"{kw} fresher hiring India",
-        f"internshala {kw} internship",
-        f"unstop {category} {kw}",
+        f"internshala internship {kw}",
+        f"{kw} internship openings India",
+        f"{kw} hiring fresher India",
     ]
+
+INTERSHALA_SLUG_BY_SKILL = {
+    "python": "python",
+    "javascript": "javascript",
+    "typescript": "web-development",
+    "react": "web-development",
+    "next.js": "web-development",
+    "nextjs": "web-development",
+    "fastapi": "python",
+    "java": "java",
+    "c++": "computer-science",
+    "sql": "computer-science",
+    "postgresql": "computer-science",
+    "mongodb": "computer-science",
+    "machine learning": "machine-learning",
+    "ai": "machine-learning",
+}
+
+INTERSHALA_SLUG_BY_FILTER = {
+    "internship_software": "computer-science",
+    "internship_ai_ml": "machine-learning",
+    "internship_data": "data-science",
+    "internship_web": "web-development",
+    "internship_mobile": "android-app-development",
+    "internship_devops": "cloud-computing",
+}
+
+def _internshala_slug(keywords: List[str], opportunity_type: str) -> str:
+    for kw in keywords:
+        slug = INTERSHALA_SLUG_BY_SKILL.get(kw.lower().strip())
+        if slug:
+            return slug
+    return INTERSHALA_SLUG_BY_FILTER.get(opportunity_type, "computer-science")
+
+def _linkedin_search_url(keywords: List[str], role_hint: str) -> str:
+    query = quote_plus(f"{' '.join(keywords[:3])} {role_hint} India")
+    return f"https://www.linkedin.com/jobs/search/?keywords={query}&location=India"
+
+def build_curated_platform_opportunities(
+    keywords: List[str],
+    opportunity_type: str,
+) -> List[dict]:
+    """
+    Direct links to trusted job boards — always available even when DuckDuckGo is blocked.
+    """
+    skill_label = ", ".join(keywords[:4]) if keywords else "software"
+    slug = _internshala_slug(keywords, opportunity_type)
+    q = quote_plus(" ".join(keywords[:3]))
+    curated: List[dict] = []
+
+    internship_types = {
+        "all", "internship", "internship_software", "internship_ai_ml",
+        "internship_data", "internship_web", "internship_mobile", "internship_devops",
+    }
+
+    if opportunity_type in internship_types:
+        curated.extend([
+            {
+                "title": f"{keywords[0] if keywords else 'Tech'} Internships on Internshala",
+                "snippet": f"Browse active internships matching your skills: {skill_label}.",
+                "url": f"https://internshala.com/internships/{slug}-internship/",
+                "platform": "Internshala",
+                "curated": True,
+            },
+            {
+                "title": "Internships on Unstop",
+                "snippet": f"Competitions and internships for {skill_label} on Unstop.",
+                "url": "https://unstop.com/internships",
+                "platform": "Unstop",
+                "curated": True,
+            },
+            {
+                "title": f"LinkedIn — {skill_label} Internships",
+                "snippet": "Search internship listings on LinkedIn filtered to India.",
+                "url": _linkedin_search_url(keywords, "internship"),
+                "platform": "LinkedIn",
+                "curated": True,
+            },
+            {
+                "title": f"Wellfound — Startup roles ({keywords[0] if keywords else 'developer'})",
+                "snippet": "Early-stage startup internships and junior roles.",
+                "url": f"https://wellfound.com/role/l/{quote_plus(keywords[0].lower() if keywords else 'software-engineer')}",
+                "platform": "Wellfound",
+                "curated": True,
+            },
+        ])
+
+    if opportunity_type in ["all", "hackathon"]:
+        curated.extend([
+            {
+                "title": "Hackathons on Unstop",
+                "snippet": f"Hackathons and coding contests for {skill_label}.",
+                "url": "https://unstop.com/hackathons",
+                "platform": "Unstop",
+                "curated": True,
+            },
+            {
+                "title": "HackerEarth Challenges",
+                "snippet": "Live hackathons and hiring challenges.",
+                "url": "https://www.hackerearth.com/challenges/",
+                "platform": "HackerEarth",
+                "curated": True,
+            },
+        ])
+
+    if opportunity_type in {"all", "job", "job_fresher"}:
+        primary = (keywords[0] if keywords else "software").lower().replace(" ", "-")
+        curated.extend([
+            {
+                "title": f"Naukri — Fresher {keywords[0] if keywords else 'Tech'} Jobs",
+                "snippet": f"Fresher job listings in India for {skill_label}.",
+                "url": f"https://www.naukri.com/{primary}-jobs",
+                "platform": "Naukri",
+                "curated": True,
+            },
+            {
+                "title": f"LinkedIn — Fresher {skill_label} Jobs",
+                "snippet": "Entry-level and graduate roles on LinkedIn.",
+                "url": _linkedin_search_url(keywords, "fresher"),
+                "platform": "LinkedIn",
+                "curated": True,
+            },
+        ])
+
+    return curated
+
+_ddg_semaphore = asyncio.Semaphore(3)
+
+async def _search_with_limit(query: str, max_results: int) -> List[dict]:
+    async with _ddg_semaphore:
+        return await search_duckduckgo(query, max_results=max_results)
 
 async def collect_search_results(queries: List[str], max_per_query: int = 8) -> List[dict]:
     """Run DuckDuckGo queries in parallel and dedupe by URL."""
@@ -650,7 +759,7 @@ async def collect_search_results(queries: List[str], max_per_query: int = 8) -> 
         return []
 
     batches = await asyncio.gather(
-        *[search_duckduckgo(q, max_results=max_per_query) for q in queries],
+        *[_search_with_limit(q, max_per_query) for q in queries],
         return_exceptions=True,
     )
 
@@ -686,15 +795,20 @@ def score_opportunity_results(
         if trust_score < min_trust:
             continue
 
+        is_curated = bool(item.get("curated"))
+        if is_curated and match_percent < 50:
+            match_percent = max(match_percent, 70)
+
         scored_results.append({
             "title": title,
             "snippet": snippet,
             "url": url,
-            "platform": detect_platform(url),
+            "platform": item.get("platform") or detect_platform(url),
             "match_percent": match_percent,
             "trust_score": trust_score,
             "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
             "opportunity_type": opportunity_type,
+            "curated": is_curated,
         })
 
     scored_results.sort(key=lambda x: (x["match_percent"], x["trust_score"]), reverse=True)
@@ -748,7 +862,11 @@ async def startup():
 
 @app.get("/")
 async def root():
-    return {"status": "CareerOS API running", "version": "2.0", "search_provider": "DuckDuckGo (free)"}
+    return {
+        "status": "CareerOS API running",
+        "version": "2.1",
+        "search_provider": "DuckDuckGo + curated platform links",
+    }
 
 # ---------- Auth Endpoints ----------
 @app.post("/auth/register")
@@ -1051,12 +1169,27 @@ async def search_opportunities(
 
     queries = build_opportunity_queries(resume_keywords, opportunity_type)
     all_raw_results = await collect_search_results(queries)
+    ddg_count = len(all_raw_results)
     used_fallback = False
 
-    if not all_raw_results:
+    if ddg_count < 3:
         used_fallback = True
         fallback_queries = build_fallback_opportunity_queries(resume_keywords, opportunity_type)
-        all_raw_results = await collect_search_results(fallback_queries)
+        extra = await collect_search_results(fallback_queries)
+        seen = {r["url"] for r in all_raw_results}
+        for item in extra:
+            if item["url"] not in seen:
+                seen.add(item["url"])
+                all_raw_results.append(item)
+
+    curated_raw = build_curated_platform_opportunities(resume_keywords, opportunity_type)
+    seen_urls = {r["url"] for r in all_raw_results}
+    curated_added = 0
+    for item in curated_raw:
+        if item["url"] not in seen_urls:
+            seen_urls.add(item["url"])
+            all_raw_results.append(item)
+            curated_added += 1
 
     scored_results = score_opportunity_results(all_raw_results, resume_keywords, opportunity_type)
 
@@ -1065,15 +1198,15 @@ async def search_opportunities(
             all_raw_results, resume_keywords, opportunity_type, min_trust=0
         )
 
+    live_count = sum(1 for r in scored_results if not r.get("curated"))
     message = None
-    if not scored_results:
-        if not all_raw_results:
-            message = (
-                "Search returned no listings right now. This can happen when job sites block "
-                "automated search — try again in a few minutes or switch the category filter."
-            )
-        else:
-            message = "Results were found but filtered as low trust. Try the Internships filter."
+    if live_count == 0 and curated_added > 0:
+        message = (
+            "Live web search was limited — showing direct links to trusted job boards "
+            "matched to your resume skills. Open each link to browse current openings."
+        )
+    elif live_count > 0 and curated_added > 0:
+        message = "Includes live search results and direct platform links."
 
     return {
         "results": scored_results[:20],
@@ -1081,8 +1214,10 @@ async def search_opportunities(
         "keywords_used": resume_keywords[:8],
         "opportunity_type": opportunity_type,
         "used_fallback": used_fallback,
+        "live_results": live_count,
+        "curated_results": sum(1 for r in scored_results if r.get("curated")),
         "message": message,
-        "disclaimer": "Results sourced via DuckDuckGo. Verify on the platform before applying.",
+        "disclaimer": "Verify listings on the platform before applying.",
     }
 
 @app.post("/api/opportunities/track")

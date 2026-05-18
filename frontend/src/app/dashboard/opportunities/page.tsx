@@ -22,6 +22,7 @@ interface SearchResult {
   match_percent: number;
   trust_score: number;
   trust_label: string;
+  curated?: boolean;
 }
 
 interface SavedOpportunity {
@@ -97,14 +98,17 @@ export default function OpportunityFinderPage() {
       setResults(data.results || []);
       setKeywordsUsed(data.keywords_used || []);
 
-      if (data.message) {
-        setError(data.message);
-      } else if ((data.results || []).length === 0) {
+      if ((data.results || []).length === 0) {
         setError(
-          'No matching listings found. Upload your resume in Resume Analyzer, then try another category.'
+          data.message ||
+            'No matching listings found. Upload your resume in Resume Analyzer, then try another category.'
         );
-      } else if (data.used_fallback) {
-        setInfo('Used broader search — results may be less specific to your filter.');
+      } else {
+        if (data.message) {
+          setInfo(data.message);
+        } else if (data.used_fallback) {
+          setInfo('Used broader search — results may be less specific to your filter.');
+        }
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail;
@@ -246,11 +250,18 @@ export default function OpportunityFinderPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">{result.title}</h3>
                   <p className="text-sm text-gray-500 mt-1 line-clamp-2">{result.snippet}</p>
-                  {result.platform && (
-                    <span className="inline-block mt-2 text-xs px-2 py-0.5 bg-gray-100 rounded-full">
-                      {result.platform}
-                    </span>
-                  )}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {result.platform && (
+                      <span className="text-xs px-2 py-0.5 bg-gray-100 rounded-full">
+                        {result.platform}
+                      </span>
+                    )}
+                    {result.curated && (
+                      <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                        Direct platform link
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex items-center gap-1 text-sm font-medium">
