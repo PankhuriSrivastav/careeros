@@ -25,6 +25,7 @@ except ImportError:
     from duckduckgo_search import DDGS  # legacy fallback
 import httpx
 from urllib.parse import quote_plus
+from opportunity_sources import gather_opportunity_listings
 
 load_dotenv()
 
@@ -795,10 +796,6 @@ def score_opportunity_results(
         if trust_score < min_trust:
             continue
 
-        is_curated = bool(item.get("curated"))
-        if is_curated and match_percent < 50:
-            match_percent = max(match_percent, 70)
-
         scored_results.append({
             "title": title,
             "snippet": snippet,
@@ -808,7 +805,7 @@ def score_opportunity_results(
             "trust_score": trust_score,
             "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
             "opportunity_type": opportunity_type,
-            "curated": is_curated,
+            "source": item.get("source", "web_search"),
         })
 
     scored_results.sort(key=lambda x: (x["match_percent"], x["trust_score"]), reverse=True)
@@ -865,7 +862,7 @@ async def root():
     return {
         "status": "CareerOS API running",
         "version": "2.1",
-        "search_provider": "DuckDuckGo + curated platform links",
+        "search_provider": "Internshala + web search + job APIs",
     }
 
 # ---------- Auth Endpoints ----------
@@ -1167,29 +1164,9 @@ async def search_opportunities(
             detail="Could not read skills from your resume. Re-upload a text-based PDF in Resume Analyzer.",
         )
 
-    queries = build_opportunity_queries(resume_keywords, opportunity_type)
-    all_raw_results = await collect_search_results(queries)
-    ddg_count = len(all_raw_results)
-    used_fallback = False
-
-    if ddg_count < 3:
-        used_fallback = True
-        fallback_queries = build_fallback_opportunity_queries(resume_keywords, opportunity_type)
-        extra = await collect_search_results(fallback_queries)
-        seen = {r["url"] for r in all_raw_results}
-        for item in extra:
-            if item["url"] not in seen:
-                seen.add(item["url"])
-                all_raw_results.append(item)
-
-    curated_raw = build_curated_platform_opportunities(resume_keywords, opportunity_type)
-    seen_urls = {r["url"] for r in all_raw_results}
-    curated_added = 0
-    for item in curated_raw:
-        if item["url"] not in seen_urls:
-            seen_urls.add(item["url"])
-            all_raw_results.append(item)
-            curated_added += 1
+    all_raw_results, source_stats = await gather_opportunity_listings(
+        resume_keywords, opportunity_type
+    )
 
     scored_results = score_opportunity_results(all_raw_results, resume_keywords, opportunity_type)
 
@@ -1198,26 +1175,26 @@ async def search_opportunities(
             all_raw_results, resume_keywords, opportunity_type, min_trust=0
         )
 
-    live_count = sum(1 for r in scored_results if not r.get("curated"))
     message = None
-    if live_count == 0 and curated_added > 0:
+    if not scored_results:
         message = (
-            "Live web search was limited — showing direct links to trusted job boards "
-            "matched to your resume skills. Open each link to browse current openings."
+            "Could not fetch listings right now. Try again in a minute or switch category. "
+            "Make sure your resume is uploaded in Resume Analyzer."
         )
-    elif live_count > 0 and curated_added > 0:
-        message = "Includes live search results and direct platform links."
+    elif source_stats.get("internshala", 0) > 0:
+        message = (
+            f"Found {len(scored_results)} openings matched to your skills — "
+            "including live Internshala postings you can apply to directly."
+        )
 
     return {
         "results": scored_results[:20],
         "total": len(scored_results),
         "keywords_used": resume_keywords[:8],
         "opportunity_type": opportunity_type,
-        "used_fallback": used_fallback,
-        "live_results": live_count,
-        "curated_results": sum(1 for r in scored_results if r.get("curated")),
+        "sources": source_stats,
         "message": message,
-        "disclaimer": "Verify listings on the platform before applying.",
+        "disclaimer": "Listings are aggregated from the web. Always verify details on the original site before applying.",
     }
 
 @app.post("/api/opportunities/track")

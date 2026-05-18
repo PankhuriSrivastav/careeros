@@ -22,7 +22,7 @@ interface SearchResult {
   match_percent: number;
   trust_score: number;
   trust_label: string;
-  curated?: boolean;
+  source?: string;
 }
 
 interface SavedOpportunity {
@@ -172,7 +172,8 @@ export default function OpportunityFinderPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Opportunity Finder</h1>
         <p className="text-gray-600 mb-4">
-          Searches job boards for roles matching your resume skills. Upload your resume first in{' '}
+          Aggregates real internship and job postings from across the web that match your resume —
+          open a listing to apply on the original site. Upload your resume first in{' '}
           <Link href="/dashboard" className="text-blue-600 hover:underline font-medium">
             Resume Analyzer
           </Link>
@@ -256,9 +257,9 @@ export default function OpportunityFinderPage() {
                         {result.platform}
                       </span>
                     )}
-                    {result.curated && (
-                      <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
-                        Direct platform link
+                    {result.source && (
+                      <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full capitalize">
+                        via {result.source.replace('_', ' ')}
                       </span>
                     )}
                   </div>
@@ -287,7 +288,7 @@ export default function OpportunityFinderPage() {
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  View Posting
+                  Apply / View
                 </a>
                 <button
                   onClick={() => handleTrack(result)}
@@ -341,7 +342,8 @@ export default function OpportunityFinderPage() {
           <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-600 mb-2">Find Your Next Opportunity</h2>
           <p className="text-gray-400 max-w-md mx-auto">
-            Upload your resume, pick a category (Software Dev, AI/ML, Web, etc.), then search.
+            Upload your resume, pick a category (Software Dev, AI/ML, Web, etc.), then search for
+            matched openings you can apply to directly.
           </p>
         </div>
       )}
