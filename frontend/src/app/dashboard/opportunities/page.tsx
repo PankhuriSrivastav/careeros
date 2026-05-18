@@ -23,6 +23,7 @@ interface SearchResult {
   trust_score: number;
   trust_label: string;
   source?: string;
+  registration_deadline?: string | null;
 }
 
 interface SavedOpportunity {
@@ -268,7 +269,9 @@ export default function OpportunityFinderPage() {
 
       {hasSearched && results.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Search Results ({results.length})</h2>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Search Results ({results.length} of {results.length})
+          </h2>
           {results.map((result) => (
             <div
               key={result.url}
@@ -287,6 +290,11 @@ export default function OpportunityFinderPage() {
                     {result.source && (
                       <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full capitalize">
                         via {result.source.replace('_', ' ')}
+                      </span>
+                    )}
+                    {result.registration_deadline && (
+                      <span className="text-xs px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full font-medium">
+                        📅 Closes: {result.registration_deadline}
                       </span>
                     )}
                   </div>

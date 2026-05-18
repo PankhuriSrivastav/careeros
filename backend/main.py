@@ -387,6 +387,41 @@ def calculate_trust_score(title: str, snippet: str, url: str) -> int:
 
     return max(0, min(100, trust))
 
+def is_opportunity_closed(title: str, snippet: str) -> bool:
+    """Detect if an opportunity listing is closed or registration expired."""
+    text = (title + " " + snippet).lower()
+    
+    closed_indicators = [
+        "closed", "registration closed", "applications closed", "registration ended",
+        "applications ended", "hiring complete", "positions filled", "no longer accepting",
+        "deadline passed", "expired", "ended", "closed on", "registration deadline passed",
+        "not accepting applications", "unfortunately closed"
+    ]
+    
+    return any(indicator in text for indicator in closed_indicators)
+
+def extract_registration_deadline(title: str, snippet: str) -> Optional[str]:
+    """
+    Extract registration/application deadline from title and snippet.
+    Returns date string or None if not found.
+    """
+    import re
+    text = f"{title} {snippet}"
+    
+    # Pattern: "Deadline: May 31", "Apply by: June 15", "Registration closes: May 20", etc.
+    patterns = [
+        r"(?:deadline|closes?|apply by|register by|registration closes?)[\s:]*([a-z]+\s+\d{1,2})",
+        r"(?:deadline|closes?|apply by|register by|registration closes?)[\s:]*(\d{1,2}[/-]\d{1,2})",
+        r"(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december))",
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    
+    return None
+
 def detect_platform(url: str) -> Optional[str]:
     """Detect source platform from URL."""
     url_lower = url.lower()
@@ -791,10 +826,16 @@ def score_opportunity_results(
         if not url:
             continue
 
+        # Skip closed opportunities
+        if is_opportunity_closed(title, snippet):
+            continue
+
         match_percent = calculate_match_from_snippet(resume_keywords, title, snippet)
         trust_score = calculate_trust_score(title, snippet, url)
         if trust_score < min_trust:
             continue
+
+        registration_deadline = extract_registration_deadline(title, snippet)
 
         scored_results.append({
             "title": title,
@@ -806,6 +847,7 @@ def score_opportunity_results(
             "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
             "opportunity_type": opportunity_type,
             "source": item.get("source", "web_search"),
+            "registration_deadline": registration_deadline,
         })
 
     scored_results.sort(key=lambda x: (x["match_percent"], x["trust_score"]), reverse=True)
@@ -1188,7 +1230,7 @@ async def search_opportunities(
         )
 
     return {
-        "results": scored_results[:20],
+        "results": scored_results[:50],
         "total": len(scored_results),
         "keywords_used": resume_keywords[:8],
         "opportunity_type": opportunity_type,
