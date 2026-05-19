@@ -420,16 +420,18 @@ def is_opportunity_closed(title: str, snippet: str, source: str = "web_search") 
     
     return False
 
-def extract_registration_deadline(title: str, snippet: str) -> Optional[str]:
+def extract_registration_deadline(title: str, snippet: str, source: str = "web_search") -> Optional[str]:
     """
     Extract registration/application deadline from title and snippet.
     Returns date string or None if not found.
     ONLY returns deadline if the opportunity is OPEN (not closed).
+    Context-aware: trusts RSS/API sources as live.
     """
     import re
     
     # First check if it's closed - if yes, return None (don't show deadline)
-    if is_opportunity_closed(title, snippet):
+    # Pass source for context-aware filtering
+    if is_opportunity_closed(title, snippet, source):
         return None
     
     text = f"{title} {snippet}"
@@ -877,7 +879,8 @@ def score_opportunity_results(
             low_trust_count += 1
             continue
 
-        registration_deadline = extract_registration_deadline(title, snippet)
+        # Extract deadline, passing source for context-aware filtering
+        registration_deadline = extract_registration_deadline(title, snippet, source)
 
         scored_results.append({
             "title": title,

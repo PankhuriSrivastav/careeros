@@ -249,7 +249,7 @@ async def fetch_internshala_listings(slug: str, max_listings: int = 15) -> List[
 
 
 async def fetch_remotive_jobs(keywords: List[str], max_jobs: int = 8) -> List[dict]:
-    """Free public API — remote tech jobs filtered by resume keywords."""
+    """Free public API — remote tech jobs (all, matching happens in scoring phase)."""
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get("https://remotive.com/api/remote-jobs")
@@ -260,16 +260,12 @@ async def fetch_remotive_jobs(keywords: List[str], max_jobs: int = 8) -> List[di
         print(f"Remotive API error: {exc}")
         return []
 
-    kw_lower = [k.lower() for k in keywords]
     results: List[dict] = []
 
     for job in jobs:
-        blob = f"{job.get('title', '')} {job.get('tags', [])} {job.get('description', '')[:500]}".lower()
-        if not any(k in blob for k in kw_lower):
-            continue
         results.append({
             "title": f"{job.get('title', 'Role')} — {job.get('company_name', 'Company')}",
-            "snippet": f"Remote · {job.get('job_type', 'Full-time')} · Posted {job.get('publication_date', '')[:10]}",
+            "snippet": f"Remote · {job.get('job_type', 'Full-time')} · Posted {job.get('publication_date', '')[:10]} · {job.get('description', '')[:150]}",
             "url": job.get("url", ""),
             "platform": "Remotive",
             "source": "remotive",
@@ -284,9 +280,9 @@ async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> L
     """
     Fetch from free public RSS feeds (Unstop, HackerEarth, GitHub).
     No auth required — completely free and legal.
+    Returns ALL opportunities; keyword matching happens in scoring phase.
     """
     results: List[dict] = []
-    kw_lower = [k.lower() for k in keywords]
     
     rss_urls = [
         "https://unstop.com/api/feeds/opportunities/rss",
@@ -309,15 +305,13 @@ async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> L
                     if resp.status_code == 200:
                         jobs = resp.json()
                         for job in jobs[:max_items_per_feed]:
-                            title_desc = f"{job.get('title', '')} {job.get('description', '')[:200]}".lower()
-                            if any(kw in title_desc for kw in kw_lower):
-                                results.append({
-                                    "title": f"{job.get('title', 'Role')} — {job.get('company', 'Company')}",
-                                    "snippet": f"{job.get('location', 'Remote')} · Posted {job.get('created_at', '')[:10]}",
-                                    "url": job.get("url", ""),
-                                    "platform": "GitHub Jobs",
-                                    "source": "rss_github",
-                                })
+                            results.append({
+                                "title": f"{job.get('title', 'Role')} — {job.get('company', 'Company')}",
+                                "snippet": f"{job.get('location', 'Remote')} · Posted {job.get('created_at', '')[:10]}",
+                                "url": job.get("url", ""),
+                                "platform": "GitHub Jobs",
+                                "source": "rss_github",
+                            })
                 else:
                     resp = await client.get(feed_url)
                     if resp.status_code == 200:
@@ -325,16 +319,14 @@ async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> L
                         for entry in feed.entries[:max_items_per_feed]:
                             title = entry.get("title", "")
                             summary = entry.get("summary", "")
-                            search_text = f"{title} {summary}".lower()
-                            if any(kw in search_text for kw in kw_lower):
-                                platform = "Unstop" if "unstop" in feed_url else "HackerEarth"
-                                results.append({
-                                    "title": title,
-                                    "snippet": summary[:200],
-                                    "url": entry.get("link", ""),
-                                    "platform": platform,
-                                    "source": f"rss_{platform.lower()}",
-                                })
+                            platform = "Unstop" if "unstop" in feed_url else "HackerEarth"
+                            results.append({
+                                "title": title,
+                                "snippet": summary[:200],
+                                "url": entry.get("link", ""),
+                                "platform": platform,
+                                "source": f"rss_{platform.lower()}",
+                            })
             except Exception as e:
                 print(f"RSS feed error ({feed_url}): {e}")
                 continue
