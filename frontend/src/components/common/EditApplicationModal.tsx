@@ -25,6 +25,7 @@ export default function EditApplicationModal({
   const [notes, setNotes] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (application) {
@@ -35,25 +36,44 @@ export default function EditApplicationModal({
       setSalary(application.salary || '');
       setNotes(application.notes || '');
       setJobDescription(application.job_description || '');
+      setError(null);
     }
-  }, [application]);
+  }, [application, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!application) return;
 
+    setError(null);
     setLoading(true);
-    await onSave(application.id, {
-      company,
-      role,
-      status: status as JobApplication['status'],
-      applied_date: appliedDate,
-      salary: salary || undefined,
-      notes: notes || undefined,
-      job_description: jobDescription || undefined,
-    });
-    setLoading(false);
-    onClose();
+    try {
+      console.log('📤 Saving application with JD:', {
+        id: application.id,
+        company,
+        role,
+        status,
+        job_description: jobDescription ? `${jobDescription.substring(0, 100)}...` : 'empty'
+      });
+      
+      await onSave(application.id, {
+        company,
+        role,
+        status: status as JobApplication['status'],
+        applied_date: appliedDate,
+        salary: salary || undefined,
+        notes: notes || undefined,
+        job_description: jobDescription || undefined,
+      });
+      
+      console.log('✅ Application saved successfully');
+      onClose();
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to save application';
+      console.error('❌ Save error:', err);
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -69,6 +89,11 @@ export default function EditApplicationModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Company *</label>
             <input

@@ -60,10 +60,14 @@ export default function DashboardPage() {
 
   const handleUpdateApplication = async (id: string, app: Omit<JobApplication, 'id'>) => {
     try {
+      console.log('🔄 Updating application:', { id, ...app });
       await apiService.updateApplication(id, app);
+      console.log('✅ Update successful, reloading...');
       await loadApplications();
     } catch (error: any) {
-      console.error('Error updating application:', error);
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to update application';
+      console.error('❌ Update error:', error);
+      alert(`Error saving: ${errorMessage}`);
       if (error?.response?.status === 401) {
         apiService.logout();
         router.push('/login');

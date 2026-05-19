@@ -994,13 +994,33 @@ async def create_application(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    app_dict = app_data.dict()
-    app_dict["id"] = uuid.uuid4()
-    app_dict["user_id"] = current_user["sub"]
-    stmt = ApplicationTable.__table__.insert().values(**app_dict)
-    await db.execute(stmt)
-    await db.commit()
-    return {"message": "Application added", "id": str(app_dict["id"])}
+    print(f"➕ CREATE: New app for user {current_user['sub']}: {app_data.company}")
+    
+    # Use ORM-style insert for consistency
+    app_id = uuid.uuid4()
+    new_app = ApplicationTable(
+        id=app_id,
+        user_id=current_user["sub"],
+        company=app_data.company,
+        role=app_data.role,
+        status=app_data.status,
+        applied_date=app_data.applied_date,
+        salary=app_data.salary,
+        notes=app_data.notes,
+        job_description=app_data.job_description
+    )
+    db.add(new_app)
+    try:
+        await db.flush()
+        await db.commit()
+        await db.refresh(new_app)
+        print(f"✅ CREATE: Added app {app_id}")
+    except Exception as e:
+        print(f"❌ CREATE ERROR: {e}")
+        await db.rollback()
+        raise HTTPException(500, f"Database error: {str(e)}")
+    
+    return {"message": "Application added", "id": str(app_id)}
 
 @app.get("/applications/")
 async def get_applications(
@@ -1047,15 +1067,22 @@ async def update_application(
     except ValueError:
         raise HTTPException(400, "Invalid UUID format")
 
+    print(f"🔄 UPDATE: Fetching app {app_id} for user {current_user['sub']}")
+    
     stmt = select(ApplicationTable).where(
-        ApplicationTable.id == app_uuid,
-        ApplicationTable.user_id == current_user["sub"]
+        and_(
+            ApplicationTable.id == app_uuid,
+            ApplicationTable.user_id == current_user["sub"]
+        )
     )
     result = await db.execute(stmt)
     existing_app = result.scalar_one_or_none()
     if not existing_app:
+        print(f"❌ UPDATE: App not found - {app_id}")
         raise HTTPException(404, "Application not found")
 
+    print(f"✏️  UPDATE: Updating app {app_id} with: company={app_data.company}, jd_len={len(app_data.job_description or '')}")
+    
     existing_app.company = app_data.company
     existing_app.role = app_data.role
     existing_app.status = app_data.status
@@ -1064,8 +1091,24 @@ async def update_application(
     existing_app.notes = app_data.notes
     existing_app.job_description = app_data.job_description
     existing_app.updated_at = datetime.utcnow()
-    await db.commit()
-    return {"message": "Application updated", "id": app_id}
+    
+    try:
+        await db.flush()  # Flush to catch any database errors
+        await db.commit()
+        # Refresh to get any database-generated values
+        await db.refresh(existing_app)
+        print(f"✅ UPDATE: Successfully committed app {app_id}")
+    except Exception as e:
+        print(f"❌ UPDATE COMMIT ERROR: {e}")
+        await db.rollback()
+        raise HTTPException(500, f"Database error: {str(e)}")
+    
+    return {
+        "message": "Application updated", 
+        "id": app_id,
+        "company": existing_app.company,
+        "job_description": existing_app.job_description[:50] + "..." if existing_app.job_description and len(existing_app.job_description) > 50 else existing_app.job_description
+    }
 
 # ---------- Resume Endpoints ----------
 @app.post("/resume/analyze")
