@@ -11,16 +11,18 @@ export default function ApplicationForm({ onSubmit }: ApplicationFormProps) {
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [status, setStatus] = useState('Applied');
+  const [jobDescription, setJobDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company || !role) return;
     setLoading(true);
-    await onSubmit({ company, role, status });
+    await onSubmit({ company, role, status, job_description: jobDescription || undefined });
     setCompany('');
     setRole('');
     setStatus('Applied');
+    setJobDescription('');
     setLoading(false);
   };
 
