@@ -1198,11 +1198,15 @@ async def get_job_description_by_company_role(
 
     if community_jd:
         age_days = (datetime.utcnow() - community_jd.created_at).days
+        raw_skills = community_jd.extracted_skills or []
+        # If skills look like generic words, re-extract with Gemini
+        if raw_skills and any(s.lower() in ["implement", "improve", "prepare", "what", "edge", "functions", "databases"] for s in raw_skills):
+            raw_skills, _ = await extract_skills_with_gemini(community_jd.job_description)
         return {
             "exists": True,
             "source_type": "community",
             "id": str(community_jd.id),
-            "extracted_skills": community_jd.extracted_skills,
+            "extracted_skills": raw_skills,
             "created_at": community_jd.created_at.isoformat(),
             "age_days": age_days,
             "is_fresh": age_days < 30,
