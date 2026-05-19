@@ -1117,8 +1117,8 @@ async def match_job(
             raise HTTPException(400, "No resume found. Please upload a resume first.")
         resume_text = latest_resume.resume_text
 
-    resume_keywords = extract_keywords(resume_text, top_n=30)
-    job_keywords = extract_keywords(request.job_description, top_n=30)
+    resume_keywords = extract_skills_from_text(resume_text)
+    job_keywords = extract_skills_from_text(request.job_description)
     match_percent, missing_keywords = calculate_match(resume_keywords, job_keywords)
 
     suggestions = []
