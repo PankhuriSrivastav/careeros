@@ -387,70 +387,35 @@ def calculate_trust_score(title: str, snippet: str, url: str) -> int:
 
     return max(0, min(100, trust))
 
-def is_opportunity_closed(title: str, snippet: str) -> bool:
+def is_opportunity_closed(title: str, snippet: str, source: str = "web_search") -> bool:
     """
-    Aggressively detect if an opportunity listing is closed or registration expired.
-    Errs on the side of filtering OUT rather than showing closed opportunities.
+    Detect if an opportunity listing is closed or registration expired.
+    Context-aware: RSS/APIs are trusted as live; only filter web_search aggressively.
     """
+    # Trust RSS feeds and official APIs — they only show CURRENT opportunities
+    if source in ["rss_unstop", "rss_hackerearth", "rss_github", "remotive", "adzuna", "jsearch"]:
+        return False  # These sources are live by definition
+    
+    # For Internshala and web search, use keyword matching
     text = (title + " " + snippet).lower()
     
-    # Keywords indicating the opportunity is CLOSED
-    closed_indicators = [
-        # Direct "closed" variations
-        "closed", "registration closed", "applications closed", "registration ended",
-        "applications ended", "hiring closed", "positions closed", "internship closed",
-        "hackathon closed", "job posting closed", "posting closed", "recruitment closed",
-        
-        # Hiring complete
-        "hiring complete", "positions filled", "fully filled", "all positions filled",
-        "recruitment complete", "hiring completed", "recruitment ended", "recruitment complete",
-        "all positions filled", "fully recruited", "hiring finished",
-        
-        # No longer accepting
-        "no longer accepting", "not accepting", "not accepting applications",
-        "not accepting registrations", "not taking", "stopped accepting",
-        "do not accept", "cannot accept", "stop accepting",
-        
-        # Deadline passed / Expired
-        "deadline passed", "deadline expired", "deadline over", "past deadline",
-        "application deadline passed", "registration deadline passed", "closed deadline",
-        "expired applications", "registration expired", "application expired",
-        "deadline has passed", "past the deadline", "missed deadline",
-        
-        # Expired / Over / Ended
-        "expired", "has ended", "has expired", "is over", "is closed",
-        "already ended", "already closed", "no longer open", "archived",
-        "inactive", "deactivated", "disabled", "unlisted",
-        
-        # Past tense indicators
-        "was closed", "got closed", "ended on", "closed on", "finished on",
-        "completed on", "stopped on",
-        
-        # Specific platform closures
-        "applications over", "registrations closed", "closed internships",
-        "closed hackathon", "closed challenge", "round closed",
-        "final round closed", "application window closed",
-        
-        # Additional variants
-        "unfortunately closed", "sorry closed", "we have closed",
-        "no more applications", "no more spots", "no vacancies",
-        "position filled", "opening filled", "seat filled", "slots filled",
-        "applications filled", "registrations filled",
-        
-        # Status keywords
-        "status: closed", "status: completed", "status: ended",
-        "status: archived", "marked as closed",
+    # HIGH CONFIDENCE closed indicators only (very specific phrases)
+    VERY_STRONG_CLOSED = [
+        "registration closed", "applications closed", "registrations closed",
+        "applications closed", "hiring closed", "recruitment closed",
+        "no longer accepting", "not accepting applications", "not accepting registrations",
+        "closed", "ended", "expired",
     ]
     
-    # Check for closed indicators - any match = closed
-    for indicator in closed_indicators:
+    # Check for strong indicators - multiple words in phrase
+    for indicator in VERY_STRONG_CLOSED:
         if indicator in text:
             return True
     
-    # Additional check: if "closed" appears with a date nearby, it's likely closed
+    # Pattern: Status indicators
     import re
-    closed_date_pattern = r"closed\s+(?:on\s+)?([a-z]+\s+\d{1,2}|[a-z]+\s+\d{4}|[0-9/.-]+)"
-    if re.search(closed_date_pattern, text, re.IGNORECASE):
+    status_pattern = r"(?:status|marked)\s*(?:as)?\s*(?:closed|expired|archived|ended)"
+    if re.search(status_pattern, text, re.IGNORECASE):
         return True
     
     return False
@@ -895,13 +860,15 @@ def score_opportunity_results(
         title = item.get("title", "")
         snippet = item.get("snippet", "")
         url = item.get("url", "")
+        source = item.get("source", "web_search")  # Get source type
+        
         if not url:
             continue
 
-        # Skip closed opportunities
-        if is_opportunity_closed(title, snippet):
+        # Skip closed opportunities (pass source for context-aware filtering)
+        if is_opportunity_closed(title, snippet, source):
             closed_count += 1
-            print(f"[FILTERED CLOSED] {title[:50]}")
+            print(f"[FILTERED CLOSED] {title[:50]} (source: {source})")
             continue
 
         match_percent = calculate_match_from_snippet(resume_keywords, title, snippet)
@@ -921,7 +888,7 @@ def score_opportunity_results(
             "trust_score": trust_score,
             "trust_label": "High" if trust_score >= 70 else "Medium" if trust_score >= 40 else "Low",
             "opportunity_type": opportunity_type,
-            "source": item.get("source", "web_search"),
+            "source": source,
             "registration_deadline": registration_deadline,
         })
 
