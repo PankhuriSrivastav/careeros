@@ -388,35 +388,93 @@ def calculate_trust_score(title: str, snippet: str, url: str) -> int:
     return max(0, min(100, trust))
 
 def is_opportunity_closed(title: str, snippet: str) -> bool:
-    """Detect if an opportunity listing is closed or registration expired."""
+    """
+    Aggressively detect if an opportunity listing is closed or registration expired.
+    Errs on the side of filtering OUT rather than showing closed opportunities.
+    """
     text = (title + " " + snippet).lower()
     
+    # Keywords indicating the opportunity is CLOSED
     closed_indicators = [
+        # Direct "closed" variations
         "closed", "registration closed", "applications closed", "registration ended",
-        "applications ended", "hiring complete", "positions filled", "no longer accepting",
-        "deadline passed", "expired", "ended", "closed on", "registration deadline passed",
-        "not accepting applications", "unfortunately closed", "applications over",
-        "registrations closed", "no more applications", "recruitment closed",
-        "position filled", "internship closed"
+        "applications ended", "hiring closed", "positions closed", "internship closed",
+        "hackathon closed", "job posting closed", "posting closed", "recruitment closed",
+        
+        # Hiring complete
+        "hiring complete", "positions filled", "fully filled", "all positions filled",
+        "recruitment complete", "hiring completed", "recruitment ended", "recruitment complete",
+        "all positions filled", "fully recruited", "hiring finished",
+        
+        # No longer accepting
+        "no longer accepting", "not accepting", "not accepting applications",
+        "not accepting registrations", "not taking", "stopped accepting",
+        "do not accept", "cannot accept", "stop accepting",
+        
+        # Deadline passed / Expired
+        "deadline passed", "deadline expired", "deadline over", "past deadline",
+        "application deadline passed", "registration deadline passed", "closed deadline",
+        "expired applications", "registration expired", "application expired",
+        "deadline has passed", "past the deadline", "missed deadline",
+        
+        # Expired / Over / Ended
+        "expired", "has ended", "has expired", "is over", "is closed",
+        "already ended", "already closed", "no longer open", "archived",
+        "inactive", "deactivated", "disabled", "unlisted",
+        
+        # Past tense indicators
+        "was closed", "got closed", "ended on", "closed on", "finished on",
+        "completed on", "stopped on",
+        
+        # Specific platform closures
+        "applications over", "registrations closed", "closed internships",
+        "closed hackathon", "closed challenge", "round closed",
+        "final round closed", "application window closed",
+        
+        # Additional variants
+        "unfortunately closed", "sorry closed", "we have closed",
+        "no more applications", "no more spots", "no vacancies",
+        "position filled", "opening filled", "seat filled", "slots filled",
+        "applications filled", "registrations filled",
+        
+        # Status keywords
+        "status: closed", "status: completed", "status: ended",
+        "status: archived", "marked as closed",
     ]
     
-    return any(indicator in text for indicator in closed_indicators)
+    # Check for closed indicators - any match = closed
+    for indicator in closed_indicators:
+        if indicator in text:
+            return True
+    
+    # Additional check: if "closed" appears with a date nearby, it's likely closed
+    import re
+    closed_date_pattern = r"closed\s+(?:on\s+)?([a-z]+\s+\d{1,2}|[a-z]+\s+\d{4}|[0-9/.-]+)"
+    if re.search(closed_date_pattern, text, re.IGNORECASE):
+        return True
+    
+    return False
 
 def extract_registration_deadline(title: str, snippet: str) -> Optional[str]:
     """
     Extract registration/application deadline from title and snippet.
     Returns date string or None if not found.
-    Works for both open and closed opportunities.
+    ONLY returns deadline if the opportunity is OPEN (not closed).
     """
     import re
+    
+    # First check if it's closed - if yes, return None (don't show deadline)
+    if is_opportunity_closed(title, snippet):
+        return None
+    
     text = f"{title} {snippet}"
     
     # Enhanced patterns to catch various deadline formats
     patterns = [
-        # "Deadline: May 31", "Closes: June 15"
-        r"(?:deadline|closes?|apply by|register by|registration closes?|last date)[\s:]*([a-z]+\s+\d{1,2}(?:\s*,?\s*\d{4})?)",
+        # "Deadline: May 31", "Closes: June 15", "Apply by: 31 May"
+        r"(?:deadline|closes?|apply by|register by|registration closes?|last date|last day|closing date)[\s:]*([a-z]+\s+\d{1,2}(?:\s*,?\s*\d{4})?)",
         # "31-05-2024" or "31/5/2024" or "5-31"
-        r"(?:deadline|closes?|apply by|register by|registration closes?|last date)[\s:]*(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)",
+        r"(?:deadline|closes?|apply by|register by|registration closes?|last date|last day|closing date)[\s:]*(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)",
         # Bare dates: "May 31", "15 June", "31st May"
         r"\b(\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)(?:\s+\d{4})?)\b",
         # "May 31" variant
@@ -830,6 +888,9 @@ def score_opportunity_results(
     min_trust: int = 15,
 ) -> List[dict]:
     scored_results = []
+    closed_count = 0
+    low_trust_count = 0
+    
     for item in raw_results:
         title = item.get("title", "")
         snippet = item.get("snippet", "")
@@ -839,11 +900,14 @@ def score_opportunity_results(
 
         # Skip closed opportunities
         if is_opportunity_closed(title, snippet):
+            closed_count += 1
+            print(f"[FILTERED CLOSED] {title[:50]}")
             continue
 
         match_percent = calculate_match_from_snippet(resume_keywords, title, snippet)
         trust_score = calculate_trust_score(title, snippet, url)
         if trust_score < min_trust:
+            low_trust_count += 1
             continue
 
         registration_deadline = extract_registration_deadline(title, snippet)
@@ -861,6 +925,7 @@ def score_opportunity_results(
             "registration_deadline": registration_deadline,
         })
 
+    print(f"[SCORING SUMMARY] Raw: {len(raw_results)}, Closed filtered: {closed_count}, Low trust: {low_trust_count}, Final: {len(scored_results)}")
     scored_results.sort(key=lambda x: (x["match_percent"], x["trust_score"]), reverse=True)
     return scored_results
 
