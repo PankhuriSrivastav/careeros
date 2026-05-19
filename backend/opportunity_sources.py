@@ -269,6 +269,7 @@ async def fetch_remotive_jobs(keywords: List[str], max_jobs: int = 8) -> List[di
             "url": job.get("url", ""),
             "platform": "Remotive",
             "source": "remotive",
+            "publication_date": job.get("publication_date", "")[:10],  # Remotive date
         })
         if len(results) >= max_jobs:
             break
@@ -311,6 +312,7 @@ async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> L
                                 "url": job.get("url", ""),
                                 "platform": "GitHub Jobs",
                                 "source": "rss_github",
+                                "posted_date": job.get("created_at", "")[:10],  # GitHub ISO date
                             })
                 else:
                     resp = await client.get(feed_url)
@@ -326,6 +328,7 @@ async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> L
                                 "url": entry.get("link", ""),
                                 "platform": platform,
                                 "source": f"rss_{platform.lower()}",
+                                "posted_date": entry.get("published", "")[:10],  # RSS published date
                             })
             except Exception as e:
                 print(f"RSS feed error ({feed_url}): {e}")
@@ -337,21 +340,32 @@ async def fetch_rss_feeds(keywords: List[str], max_items_per_feed: int = 5) -> L
 async def fetch_adzuna_jobs(keywords: List[str], max_jobs: int = 10) -> List[dict]:
     """
     Adzuna API — Free tier covers Indian job market + internships.
-    No auth required for basic searches.
+    Requires ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables.
+    Get free credentials at: https://developer.adzuna.com/
     """
     results: List[dict] = []
     
-    # Adzuna public API endpoint — free, no key needed for limited searches
+    # Adzuna API endpoint for India
     adzuna_url = "https://api.adzuna.com/v1/api/jobs/in/search/1"
+    
+    # Get API credentials from environment
+    app_id = os.getenv("ADZUNA_APP_ID", "")
+    app_key = os.getenv("ADZUNA_APP_KEY", "")
+    
+    if not app_id or not app_key:
+        print("⚠️ ADZUNA_APP_ID or ADZUNA_APP_KEY not set. Get free credentials at https://developer.adzuna.com/")
+        return results
     
     kw = " ".join(keywords[:2]) if keywords else "developer"
     
     params = {
+        "app_id": app_id,
+        "app_key": app_key,
         "what": kw,
         "where": "India",
         "results_per_page": max_jobs,
         "sort_by": "date",
-        "full_time": "1",  # 1 = include, 0 = exclude
+        "content-type": "application/json",
     }
 
     try:
@@ -366,7 +380,10 @@ async def fetch_adzuna_jobs(keywords: List[str], max_jobs: int = 10) -> List[dic
                         "url": job.get("redirect_url", ""),
                         "platform": "Adzuna",
                         "source": "adzuna",
+                        "posted_date": job.get("created", "")[:10],  # Adzuna returns ISO date
                     })
+            else:
+                print(f"Adzuna API error: status {resp.status_code}")
     except Exception as e:
         print(f"Adzuna API error: {e}")
 
@@ -416,6 +433,7 @@ async def fetch_jsearch_jobs(keywords: List[str], max_jobs: int = 8) -> List[dic
                         "url": job.get("job_apply_link", "") or job.get("job_apply_url", ""),
                         "platform": job.get("job_publisher", "Job Board"),
                         "source": "jsearch",
+                        "posted_date": job.get("job_posted_at_datetime_utc", "")[:10],  # JSearch ISO date
                     })
             else:
                 print(f"JSearch API error: status {resp.status_code}")
@@ -423,6 +441,36 @@ async def fetch_jsearch_jobs(keywords: List[str], max_jobs: int = 8) -> List[dic
         print(f"JSearch API error: {e}")
 
     return results
+
+
+def _extract_posting_date(item: dict) -> Optional[datetime]:
+    """
+    Extract posting date from item metadata.
+    Supports: publication_date, created_at, posted_date, publication_time
+    """
+    from datetime import datetime
+    
+    date_fields = [
+        "publication_date", "created_at", "posted_date", 
+        "publication_time", "post_date", "date_posted"
+    ]
+    
+    for field in date_fields:
+        date_str = item.get(field, "")
+        if not date_str:
+            continue
+        
+        # Clean date string (take only first 10 chars if it has timestamp)
+        date_str = str(date_str)[:10]
+        
+        try:
+            # Try YYYY-MM-DD format
+            return datetime.strptime(date_str, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            pass
+    
+    # If no valid date found, assume recent (don't filter)
+    return None
 
 
 def _dedupe_by_url(items: List[dict]) -> List[dict]:
@@ -481,10 +529,7 @@ async def gather_opportunity_listings(
     if opportunity_type in {"all", "job", "job_fresher"} | internship_types:
         tasks.append(("remotive", fetch_remotive_jobs(keywords)))
 
-    # Web search (DuckDuckGo + detail searches)
-    search_queries = build_detail_search_queries(keywords, opportunity_type)
-    for q in search_queries:
-        tasks.append(("web_search", search_job_postings_online(q)))
+    # REMOVED: Web search (DuckDuckGo) - Adzuna provides live, structured Indian job market
 
     results: List[dict] = []
     stats = {
@@ -493,7 +538,6 @@ async def gather_opportunity_listings(
         "adzuna": 0,
         "jsearch": 0,
         "remotive": 0,
-        "web_search": 0,
     }
 
     if not tasks:
@@ -508,4 +552,19 @@ async def gather_opportunity_listings(
         stats[source_name] = stats.get(source_name, 0) + len(batch)
         results.extend(batch)
 
-    return _dedupe_by_url(results), stats
+    # Filter: Remove listings older than 14 days
+    from datetime import datetime, timedelta
+    two_weeks_ago = datetime.utcnow() - timedelta(days=14)
+    filtered_results = []
+    
+    for item in results:
+        # Try to extract posting date
+        posted_date = _extract_posting_date(item)
+        
+        # If we can parse the date and it's older than 14 days, skip it
+        if posted_date and posted_date < two_weeks_ago:
+            continue
+        
+        filtered_results.append(item)
+    
+    return _dedupe_by_url(filtered_results), stats
