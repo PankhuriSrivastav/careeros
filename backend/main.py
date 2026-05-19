@@ -212,6 +212,10 @@ class JobDescriptionCreate(BaseModel):
     job_description: str
     share_consent: bool = False
 
+class JobDescriptionUpdate(BaseModel):
+    job_description: str
+    share_consent: Optional[bool] = None
+
 class OpportunitySearchRequest(BaseModel):
     keywords: Optional[List[str]] = None   # if None, auto-pulled from resume
     platforms: Optional[List[str]] = None  # filter by platform
@@ -1174,6 +1178,48 @@ async def create_job_description(
         "extracted_skills": extracted_skills,
         "source_type": "community",
         "created_at": new_jd.created_at.isoformat() if new_jd.created_at else None
+    }
+
+@app.put("/api/job-descriptions/{jd_id}")
+async def update_job_description(
+    jd_id: str,
+    jd_update: JobDescriptionUpdate,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        jd_uuid = uuid.UUID(jd_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JD ID")
+
+    stmt = select(JobDescriptionTable).where(JobDescriptionTable.id == jd_uuid)
+    result = await db.execute(stmt)
+    jd = result.scalar_one_or_none()
+
+    if not jd:
+        raise HTTPException(status_code=404, detail="Job description not found")
+
+    # Extract new skills from updated JD
+    extracted_skills, _ = await extract_skills_with_gemini(jd_update.job_description)
+
+    # Update the JD
+    jd.job_description = jd_update.job_description
+    jd.extracted_skills = extracted_skills
+    jd.extracted_keywords = extracted_skills
+    jd.updated_at = datetime.utcnow()
+    
+    if jd_update.share_consent is not None:
+        jd.share_consent = jd_update.share_consent
+
+    await db.commit()
+    await db.refresh(jd)
+
+    return {
+        "id": str(jd.id),
+        "extracted_skills": extracted_skills,
+        "source_type": jd.source_type,
+        "created_at": jd.created_at.isoformat() if jd.created_at else None,
+        "updated_at": jd.updated_at.isoformat() if jd.updated_at else None
     }
 
 @app.get("/api/job-descriptions/{company}/{role}")

@@ -254,30 +254,86 @@ export default function SkillGapAnalyzerPage() {
   const pasteRealJD = async (companyName: string, role: string, jdText: string) => {
     setPastingJD(true);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          company_name: companyName,
-          role: role,
-          job_description: jdText,
-          share_consent: true
-        })
-      });
+      // Get current company data to check if JD exists
+      const currentCompany = selectedCompanies.find(c => c.name === companyName && c.role === role);
       
+      // First, check if this JD came from user's application
+      const appsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const apps = await appsResponse.json();
+      const userApp = apps.find((app: any) =>
+        app.company.toLowerCase() === companyName.toLowerCase() &&
+        app.role.toLowerCase() === role.toLowerCase()
+      );
+
+      if (userApp) {
+        // Update the user's application with new JD
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/${userApp.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            company: userApp.company,
+            role: userApp.role,
+            status: userApp.status,
+            applied_date: userApp.applied_date,
+            salary: userApp.salary,
+            notes: userApp.notes,
+            job_description: jdText
+          })
+        });
+      }
+
+      // Update or create job description in job_descriptions table
+      if (currentCompany?.jdData?.id && currentCompany.jdData.source_type === 'community') {
+        // Update existing JD using PUT
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${currentCompany.jdData.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            job_description: jdText,
+            share_consent: true
+          })
+        });
+      } else {
+        // Create new JD using POST
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            company_name: companyName,
+            role: role,
+            job_description: jdText,
+            share_consent: true
+          })
+        });
+      }
+
+      // Refresh the JD data
       const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const refreshData = await refreshResponse.json();
-      
-      setSelectedCompanies(prev => prev.map(c => 
+
+      setSelectedCompanies(prev => prev.map(c =>
         c.name === companyName && c.role === role ? { ...c, jdData: refreshData, isLoading: false } : c
       ));
       setShowJDPaste(null);
       setJdText('');
+
+      // Auto-reanalyze skill gaps after JD update
+      if (resumeSkills.length > 0) {
+        await analyzeGaps();
+      }
     } catch (error) {
       console.error('Error saving JD:', error);
     } finally {
@@ -542,25 +598,34 @@ export default function SkillGapAnalyzerPage() {
                         </span>
                       ))}
                     </div>
-                    
-                    {company.jdData.source_type === 'ai_estimate' && (
-                      <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                        <div className="flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <p className="text-xs text-orange-700">
-                              These skills are AI-estimated, not from a real {company.name} JD.
-                            </p>
-                            <button
-                              onClick={() => setShowJDPaste(`${company.name}|${company.role}`)}
-                              className="text-xs text-orange-600 hover:text-orange-800 underline mt-1 font-medium"
-                            >
-                              → Paste real JD for accurate results
-                            </button>
+
+                    <div className="mt-3 flex gap-2">
+                      {company.jdData.source_type === 'ai_estimate' ? (
+                        <div className="flex-1 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-xs text-orange-700">
+                                These skills are AI-estimated, not from a real {company.name} JD.
+                              </p>
+                              <button
+                                onClick={() => setShowJDPaste(`${company.name}|${company.role}`)}
+                                className="text-xs text-orange-600 hover:text-orange-800 underline mt-1 font-medium"
+                              >
+                                → Paste real JD for accurate results
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <button
+                          onClick={() => setShowJDPaste(`${company.name}|${company.role}`)}
+                          className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium transition"
+                        >
+                          ✏️ Edit JD
+                        </button>
+                      )}
+                    </div>
                     
                     {showJDPaste === `${company.name}|${company.role}` && (
                       <div className="mt-3 p-4 border border-gray-200 rounded-lg bg-gray-50">
@@ -583,7 +648,7 @@ export default function SkillGapAnalyzerPage() {
                         </div>
 
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Paste the full job description below
+                          {company.jdData?.source_type === 'ai_estimate' ? 'Paste the full job description below' : 'Edit the job description below'}
                         </label>
                         <textarea
                           value={jdText}
