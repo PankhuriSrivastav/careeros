@@ -1058,6 +1058,7 @@ async def update_application(
     existing_app.applied_date = app_data.applied_date
     existing_app.salary = app_data.salary
     existing_app.notes = app_data.notes
+    existing_app.job_description = app_data.job_description
     existing_app.updated_at = datetime.utcnow()
     await db.commit()
     return {"message": "Application updated", "id": app_id}

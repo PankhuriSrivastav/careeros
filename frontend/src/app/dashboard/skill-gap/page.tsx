@@ -191,21 +191,51 @@ export default function SkillGapAnalyzerPage() {
     setShowAddCompany(false);
     setCompanyInput('');
     setRoleInput('');
-    
+
     setSelectedCompanies(prev => [...prev, { name: companyName, role, isLoading: true }]);
-    
+
     try {
+      // First try to get JD from job_descriptions table (community JDs)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${encodeURIComponent(companyName)}/${encodeURIComponent(role)}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await response.json();
-      
-      setSelectedCompanies(prev => prev.map(c => 
+
+      // If no community JD exists, check if user has an application with JD
+      if (!data.exists || data.source_type === 'no_data') {
+        const appsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const apps = await appsResponse.json();
+        const userApp = apps.find((app: any) =>
+          app.company.toLowerCase() === companyName.toLowerCase() &&
+          app.role.toLowerCase() === role.toLowerCase() &&
+          app.job_description
+        );
+
+        if (userApp) {
+          // Use JD from user's application
+          const jdData = {
+            exists: true,
+            source_type: 'user_application',
+            extracted_skills: [], // Skills would need to be extracted
+            job_description: userApp.job_description,
+            created_at: userApp.created_at,
+            age_days: Math.floor((new Date().getTime() - new Date(userApp.created_at).getTime()) / (1000 * 60 * 60 * 24))
+          };
+          setSelectedCompanies(prev => prev.map(c =>
+            c.name === companyName && c.role === role ? { ...c, jdData: jdData, isLoading: false } : c
+          ));
+          return;
+        }
+      }
+
+      setSelectedCompanies(prev => prev.map(c =>
         c.name === companyName && c.role === role ? { ...c, jdData: data, isLoading: false } : c
       ));
     } catch (error) {
       console.error('Error fetching JD:', error);
-      setSelectedCompanies(prev => prev.map(c => 
+      setSelectedCompanies(prev => prev.map(c =>
         c.name === companyName && c.role === role ? { ...c, isLoading: false } : c
       ));
     }
