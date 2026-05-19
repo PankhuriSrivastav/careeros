@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 
 interface ApplicationFormProps {
-  onSubmit: (app: { company: string; role: string; status: string }) => Promise<void>;
+  onSubmit: (app: { company: string; role: string; status: string; job_description?: string }) => Promise<void>;
 }
 
 export default function ApplicationForm({ onSubmit }: ApplicationFormProps) {
@@ -65,6 +65,17 @@ export default function ApplicationForm({ onSubmit }: ApplicationFormProps) {
               <option value="Rejected">Rejected</option>
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Job Description (Optional)</label>
+          <textarea
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            rows={4}
+            placeholder="Paste the job description here for skill gap analysis..."
+          />
         </div>
         <button
           type="submit"

@@ -23,6 +23,7 @@ export default function EditApplicationModal({
   const [appliedDate, setAppliedDate] = useState('');
   const [salary, setSalary] = useState('');
   const [notes, setNotes] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function EditApplicationModal({
       setAppliedDate(application.applied_date);
       setSalary(application.salary || '');
       setNotes(application.notes || '');
+      setJobDescription(application.job_description || '');
     }
   }, [application]);
 
@@ -48,6 +50,7 @@ export default function EditApplicationModal({
       applied_date: appliedDate,
       salary: salary || undefined,
       notes: notes || undefined,
+      job_description: jobDescription || undefined,
     });
     setLoading(false);
     onClose();
@@ -133,6 +136,17 @@ export default function EditApplicationModal({
               className="w-full p-2 border border-gray-300 rounded-lg"
               rows={2}
               placeholder="Interview date, recruiter name, etc."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Job Description (Optional)</label>
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg"
+              rows={4}
+              placeholder="Paste the job description here for skill gap analysis..."
             />
           </div>
 

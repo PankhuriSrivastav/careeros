@@ -7,7 +7,7 @@ import ApplicationList from '@/components/common/ApplicationList';
 
 interface ApplicationsTabProps {
   applications: JobApplication[];
-  onCreate: (app: { company: string; role: string; status: string }) => Promise<void>;
+  onCreate: (app: { company: string; role: string; status: string; job_description?: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onUpdate: (id: string, app: Omit<JobApplication, 'id'>) => Promise<void>;  // ✅ Added
 }
