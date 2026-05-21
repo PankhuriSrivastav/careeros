@@ -134,4 +134,31 @@ export const apiService = {
     const response = await api.post('/api/opportunities/track', payload);
     return response.data;
   },
+
+  // Resume tailoring
+  async getResumeVersions() {
+    const response = await api.get('/resume/versions');
+    return response.data;
+  },
+
+  async tailorResume(resumeVersionId: string, jobDescription: string, companyName: string, applicationId?: string) {
+    const response = await api.post('/resume/tailor', {
+      resume_version_id: resumeVersionId,
+      job_description: jobDescription,
+      company_name: companyName,
+      application_id: applicationId,
+    });
+    return response.data;
+  },
+
+  async saveTailoredResume(tailoredText: string, companyName: string, originalMatch: number, tailoredMatch: number, applicationId?: string) {
+    const response = await api.post('/resume/save-tailored', {
+      tailored_text: tailoredText,
+      company_name: companyName,
+      original_match: originalMatch,
+      tailored_match: tailoredMatch,
+      application_id: applicationId,
+    });
+    return response.data;
+  },
 };

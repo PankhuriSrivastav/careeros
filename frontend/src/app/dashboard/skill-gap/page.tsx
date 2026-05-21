@@ -214,14 +214,31 @@ export default function SkillGapAnalyzerPage() {
         );
 
         if (userApp) {
-          // Use JD from user's application
+          // Save user's application JD to job_descriptions table to get an ID
+          const saveResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+              company_name: companyName,
+              role: role,
+              job_description: userApp.job_description,
+              share_consent: true
+            })
+          });
+          const savedData = await saveResponse.json();
+          
+          // Use the saved JD data
           const jdData = {
             exists: true,
-            source_type: 'user_application',
-            extracted_skills: [], // Skills would need to be extracted
+            source_type: 'community',
+            id: savedData.id,
+            extracted_skills: savedData.extracted_skills || [],
             job_description: userApp.job_description,
-            created_at: userApp.created_at,
-            age_days: Math.floor((new Date().getTime() - new Date(userApp.created_at).getTime()) / (1000 * 60 * 60 * 24))
+            created_at: savedData.created_at || userApp.created_at,
+            age_days: savedData.created_at ? Math.floor((new Date().getTime() - new Date(savedData.created_at).getTime()) / (1000 * 60 * 60 * 24)) : Math.floor((new Date().getTime() - new Date(userApp.created_at).getTime()) / (1000 * 60 * 60 * 24))
           };
           setSelectedCompanies(prev => prev.map(c =>
             c.name === companyName && c.role === role ? { ...c, jdData: jdData, isLoading: false } : c
@@ -256,6 +273,7 @@ export default function SkillGapAnalyzerPage() {
     try {
       // Get current company data to check if JD exists
       const currentCompany = selectedCompanies.find(c => c.name === companyName && c.role === role);
+      console.log('Current company data:', currentCompany);
       
       // First, check if this JD came from user's application
       const appsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/`, {
@@ -268,8 +286,9 @@ export default function SkillGapAnalyzerPage() {
       );
 
       if (userApp) {
+        console.log('Updating user application:', userApp.id);
         // Update the user's application with new JD
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/${userApp.id}`, {
+        const appUpdateResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/applications/${userApp.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -285,12 +304,14 @@ export default function SkillGapAnalyzerPage() {
             job_description: jdText
           })
         });
+        console.log('Application update response:', appUpdateResponse.ok);
       }
 
       // Update or create job description in job_descriptions table
       if (currentCompany?.jdData?.id && currentCompany.jdData.source_type === 'community') {
+        console.log('Updating existing JD with ID:', currentCompany.jdData.id);
         // Update existing JD using PUT
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${currentCompany.jdData.id}`, {
+        const jdUpdateResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions/${currentCompany.jdData.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -301,9 +322,15 @@ export default function SkillGapAnalyzerPage() {
             share_consent: true
           })
         });
+        console.log('JD update response:', jdUpdateResponse.ok);
+        if (!jdUpdateResponse.ok) {
+          const errorText = await jdUpdateResponse.text();
+          console.error('JD update failed:', errorText);
+        }
       } else {
+        console.log('Creating new JD (no existing ID or not community type)');
         // Create new JD using POST
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
+        const jdCreateResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/job-descriptions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -316,6 +343,11 @@ export default function SkillGapAnalyzerPage() {
             share_consent: true
           })
         });
+        console.log('JD create response:', jdCreateResponse.ok);
+        if (!jdCreateResponse.ok) {
+          const errorText = await jdCreateResponse.text();
+          console.error('JD create failed:', errorText);
+        }
       }
 
       // Refresh the JD data
@@ -323,6 +355,7 @@ export default function SkillGapAnalyzerPage() {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const refreshData = await refreshResponse.json();
+      console.log('Refreshed JD data:', refreshData);
 
       setSelectedCompanies(prev => prev.map(c =>
         c.name === companyName && c.role === role ? { ...c, jdData: refreshData, isLoading: false } : c

@@ -2,8 +2,9 @@
 
 import {
   LayoutDashboard, FileText, Target, LogOut, BarChart3,
-  TrendingUp, Briefcase
+  TrendingUp, Briefcase, Wand2
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface SidebarProps {
   activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities';
@@ -45,6 +46,16 @@ export default function Sidebar({ activeTab, onTabChange, onLogout }: SidebarPro
           <Target className="w-5 h-5" />
           <span>Job Matcher</span>
         </button>
+        
+        {/* 🆕 TailorKit Link */}
+        <Link
+          href="/tailorkit"
+          className="w-full flex items-center space-x-3 px-4 py-2 rounded-lg transition text-gray-600 hover:bg-purple-50 hover:text-purple-700"
+        >
+          <Wand2 className="w-5 h-5" />
+          <span>TailorKit</span>
+        </Link>
+        
         <button
           onClick={() => onTabChange('analytics')}
           className={`w-full flex items-center space-x-3 px-4 py-2 rounded-lg transition ${

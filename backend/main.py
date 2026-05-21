@@ -89,6 +89,12 @@ class UserResumeTable(Base):
     user_id = Column(String, index=True)
     resume_text = Column(Text)
     keywords = Column(Text)
+    label = Column(String, nullable=True)  # e.g., "Updated October 2026" or "Razorpay SWE Intern"
+    ats_score = Column(Integer, nullable=True)  # ATS score for this version
+    score_diff = Column(Integer, nullable=True)  # Score difference from previous version
+    is_tailored = Column(Boolean, default=False)  # True if this is a tailored version
+    tailored_for_company = Column(String, nullable=True)  # Company name if tailored
+    tailored_for_application_id = Column(UUID(as_uuid=True), nullable=True)  # Reference to application
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class JobDescriptionTable(Base):
@@ -532,6 +538,63 @@ Output:"""
     except Exception as e:
         print(f"Gemini skill extraction error: {e}")
         return text_skills, "text_scan"
+
+async def tailor_resume_with_gemini(resume_text: str, job_description: str, company_name: str) -> str:
+    """
+    Tailor resume for a specific job using Gemini.
+    Returns the tailored resume text.
+    """
+    if genai_client is None:
+        raise Exception("Gemini AI not configured")
+
+    try:
+        prompt = f"""
+You are an expert career coach helping tailor a resume for a specific job application.
+
+IMPORTANT INSTRUCTIONS:
+1. Rewrite resume content to highlight skills and experiences matching the job description
+2. Keep all real experience and achievements - do NOT fabricate anything
+3. Change only the presentation and emphasis of real experience
+4. Use keywords from the job description where relevant
+5. Maintain professional formatting and clarity
+6. Keep it truthful and honest - this is crucial
+7. Make the resume compelling but factual
+
+COMPANY: {company_name}
+
+ORIGINAL RESUME:
+{resume_text}
+
+JOB DESCRIPTION:
+{job_description}
+
+Please provide the tailored resume (text only, no markdown):"""
+
+        response = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        tailored_text = response.text.strip()
+        return tailored_text
+    except Exception as e:
+        print(f"Gemini tailoring error: {e}")
+        raise
+
+def calculate_keyword_match_percent(resume_text: str, job_description: str) -> float:
+    """Calculate percentage of job keywords found in resume."""
+    resume_keywords_list = extract_skills_from_text(resume_text)
+    job_keywords_list = extract_skills_from_text(job_description)
+    
+    if not job_keywords_list:
+        return 0.0
+    
+    matched = sum(1 for kw in job_keywords_list if any(
+        kw.lower() in resume_text.lower() or 
+        extract_skills_from_text(kw) 
+        for _ in [1]
+    ))
+    
+    return (matched / len(job_keywords_list)) * 100 if job_keywords_list else 0.0
 
 LOW_VALUE_SEARCH_DOMAINS = {
     "wikipedia.org",
@@ -1130,10 +1193,29 @@ async def analyze_resume(
     keywords, analysis_source = await extract_skills_with_gemini(text)
     score, matched, missing = calculate_resume_ats_score(keywords, text)
 
+    # Get previous version to calculate score_diff
+    stmt = select(UserResumeTable).where(
+        UserResumeTable.user_id == current_user["sub"]
+    ).order_by(desc(UserResumeTable.created_at))
+    result = await db.execute(stmt)
+    previous_resume = result.scalars().first()
+    
+    score_diff = None
+    if previous_resume and previous_resume.ats_score is not None:
+        score_diff = score - previous_resume.ats_score
+
+    # Generate a label with current date
+    current_date = datetime.utcnow()
+    label = f"Version {current_date.strftime('%d %B %Y')}"
+
     new_resume = UserResumeTable(
         user_id=current_user["sub"],
         resume_text=text,
-        keywords=",".join(keywords)
+        keywords=",".join(keywords),
+        ats_score=score,
+        score_diff=score_diff,
+        label=label,
+        is_tailored=False
     )
     db.add(new_resume)
     await db.commit()
@@ -1147,12 +1229,152 @@ async def analyze_resume(
         "analysis_source": analysis_source,
     }
 
+@app.get("/resume/versions")
+async def get_resume_versions(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all resume versions for the current user, ordered newest first."""
+    stmt = select(UserResumeTable).where(
+        UserResumeTable.user_id == current_user["sub"]
+    ).order_by(desc(UserResumeTable.created_at))
+    result = await db.execute(stmt)
+    versions = result.scalars().all()
+    
+    return [
+        {
+            "id": str(v.id),
+            "label": v.label or "Untitled Version",
+            "ats_score": v.ats_score,
+            "score_diff": v.score_diff,
+            "upload_date": v.created_at.strftime("%d %b %Y") if v.created_at else "",
+            "is_tailored": v.is_tailored,
+            "tailored_for_company": v.tailored_for_company,
+            "created_at": v.created_at.isoformat()
+        }
+        for v in versions
+    ]
+
+class TailorRequest(BaseModel):
+    resume_version_id: str
+    job_description: str
+    company_name: str
+    application_id: Optional[str] = None
+
+@app.post("/resume/tailor")
+async def tailor_resume(
+    request: TailorRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Tailor a resume for a specific company and job."""
+    try:
+        version_uuid = uuid.UUID(request.resume_version_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid version ID format")
+    
+    # Get the resume version
+    stmt = select(UserResumeTable).where(
+        and_(
+            UserResumeTable.id == version_uuid,
+            UserResumeTable.user_id == current_user["sub"]
+        )
+    )
+    result = await db.execute(stmt)
+    resume_version = result.scalar_one_or_none()
+    
+    if not resume_version:
+        raise HTTPException(404, "Resume version not found")
+    
+    # Call Gemini to tailor the resume
+    tailored_text = await tailor_resume_with_gemini(
+        resume_version.resume_text,
+        request.job_description,
+        request.company_name
+    )
+    
+    # Calculate match scores
+    original_match = calculate_keyword_match_percent(resume_version.resume_text, request.job_description)
+    tailored_match = calculate_keyword_match_percent(tailored_text, request.job_description)
+    
+    return {
+        "original_resume": resume_version.resume_text,
+        "tailored_resume": tailored_text,
+        "original_match": round(original_match),
+        "tailored_match": round(tailored_match),
+        "match_improvement": round(tailored_match - original_match),
+        "company_name": request.company_name
+    }
+
+class SaveTailoredResumeRequest(BaseModel):
+    tailored_text: str
+    company_name: str
+    original_match: int
+    tailored_match: int
+    application_id: Optional[str] = None
+
+@app.post("/resume/save-tailored")
+async def save_tailored_resume(
+    request: SaveTailoredResumeRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save a tailored resume as a new version."""
+    # Extract keywords from tailored resume
+    keywords, _ = await extract_skills_with_gemini(request.tailored_text)
+    score, _, _ = calculate_resume_ats_score(keywords, request.tailored_text)
+    
+    # Calculate score_diff from previous version
+    stmt = select(UserResumeTable).where(
+        UserResumeTable.user_id == current_user["sub"]
+    ).order_by(desc(UserResumeTable.created_at))
+    result = await db.execute(stmt)
+    previous_resume = result.scalars().first()
+    
+    score_diff = None
+    if previous_resume and previous_resume.ats_score is not None:
+        score_diff = score - previous_resume.ats_score
+    
+    # Get application ID if provided
+    application_id = None
+    if request.application_id:
+        try:
+            application_id = uuid.UUID(request.application_id)
+        except ValueError:
+            pass
+    
+    # Create new tailored version
+    label = f"{request.company_name} • {datetime.utcnow().strftime('%d %b %Y')}"
+    
+    new_resume = UserResumeTable(
+        user_id=current_user["sub"],
+        resume_text=request.tailored_text,
+        keywords=",".join(keywords),
+        ats_score=score,
+        score_diff=score_diff,
+        label=label,
+        is_tailored=True,
+        tailored_for_company=request.company_name,
+        tailored_for_application_id=application_id
+    )
+    db.add(new_resume)
+    await db.commit()
+    
+    return {
+        "message": "Tailored resume saved",
+        "id": str(new_resume.id),
+        "label": label,
+        "ats_score": score,
+        "score_diff": score_diff
+    }
+
 @app.post("/job/match")
 async def match_job(
     request: JobMatchRequest,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """Get match percentage between resume and job."""
     if request.resume_text:
         resume_text = request.resume_text
     else:

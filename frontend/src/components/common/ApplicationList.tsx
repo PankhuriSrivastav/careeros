@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Building2, Briefcase, Calendar, Trash2, Edit2, Search, Filter, ArrowUpDown } from 'lucide-react';
+import { Building2, Briefcase, Calendar, Trash2, Edit2, Search, Filter, ArrowUpDown, Wand2 } from 'lucide-react';
 import { JobApplication } from '@/lib/api';
 import EditApplicationModal from './EditApplicationModal';
+import Link from 'next/link';
 
 interface ApplicationListProps {
   applications: JobApplication[];
@@ -223,6 +224,13 @@ export default function ApplicationList({ applications, onDelete, onUpdate }: Ap
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
+                    <Link
+                      href={`/tailorkit?app_id=${app.id}&company=${encodeURIComponent(app.company)}`}
+                      className="p-2 text-purple-500 hover:bg-purple-50 rounded-lg transition"
+                      title="Tailor Resume"
+                    >
+                      <Wand2 className="w-5 h-5" />
+                    </Link>
                     <button
                       onClick={() => handleEdit(app)}
                       className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"
