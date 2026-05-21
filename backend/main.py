@@ -164,7 +164,7 @@ app.default_response_class = CustomJSONResponse
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to your Vercel domain in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
