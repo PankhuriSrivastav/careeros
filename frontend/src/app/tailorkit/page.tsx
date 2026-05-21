@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 import TailorKitContent from '@/components/tailorkit/TailorKitContent';
+import Sidebar from '@/components/dashboard/Sidebar';
 
 export interface ResumeVersion {
   id: string;
@@ -29,9 +31,15 @@ function TailorKitPageContent() {
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   // Load resume versions and applications on mount
   useEffect(() => {
+    if (!apiService.isAuthenticated()) {
+      router.push('/login');
+      return;
+    }
+
     const loadData = async () => {
       try {
         setLoading(true);
@@ -50,40 +58,48 @@ function TailorKitPageContent() {
     };
 
     loadData();
-  }, []);
+  }, [router]);
+
+  const handleLogout = () => {
+    apiService.logout();
+    localStorage.clear();
+    router.push('/login');
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex-1 min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">TailorKit</h1>
-          <p className="text-gray-600 mt-2">Tailor your resume for each company to maximize match scores</p>
-        </div>
+    <div className="flex-1 flex flex-col overflow-auto">
+      {/* Header */}
+      <header className="bg-white shadow-sm px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+        <h1 className="text-2xl font-bold text-gray-900">TailorKit</h1>
+        <p className="text-gray-600">Tailor your resume for each company</p>
+      </header>
 
-        {/* Main Container - two column on desktop, stacked on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Suspense
-            fallback={
-              <div className="lg:col-span-2 col-span-1">
-                <div className="bg-white rounded-lg shadow-sm animate-pulse h-96"></div>
-              </div>
-            }
-          >
-            <TailorKitContent
-              versions={versions}
-              applications={applications}
-              onVersionsUpdated={setVersions}
-            />
-          </Suspense>
+      {/* Content */}
+      <div className="flex-1 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Suspense
+              fallback={
+                <div className="lg:col-span-2 col-span-1">
+                  <div className="bg-white rounded-lg shadow-sm animate-pulse h-96"></div>
+                </div>
+              }
+            >
+              <TailorKitContent
+                versions={versions}
+                applications={applications}
+                onVersionsUpdated={setVersions}
+              />
+            </Suspense>
+          </div>
         </div>
       </div>
     </div>
@@ -91,15 +107,35 @@ function TailorKitPageContent() {
 }
 
 export default function TailorKitPage() {
+  const [activeTab] = useState<
+    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities'
+  >('applications'); // TailorKit is accessed via direct link, not a tab
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!apiService.isAuthenticated()) {
+      router.push('/login');
+    }
+  }, [router]);
+
+  const handleLogout = () => {
+    apiService.logout();
+    localStorage.clear();
+    router.push('/login');
+  };
+
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      }
-    >
-      <TailorKitPageContent />
-    </Suspense>
+    <div className="min-h-screen bg-gray-50 flex">
+      <Sidebar activeTab={activeTab} onTabChange={() => {}} onLogout={handleLogout} />
+      <Suspense
+        fallback={
+          <div className="flex-1 min-h-screen bg-gray-50 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        }
+      >
+        <TailorKitPageContent />
+      </Suspense>
+    </div>
   );
 }

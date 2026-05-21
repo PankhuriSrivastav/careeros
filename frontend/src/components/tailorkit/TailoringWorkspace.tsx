@@ -48,14 +48,34 @@ export default function TailoringWorkspace({
     if (preSelectedAppId && applications.length > 0) {
       const app = applications.find((a) => a.id === preSelectedAppId);
       if (app) {
+        console.log('Found app from preSelectedAppId:', app);
         setSelectedApp(app);
         setSelectedCompany(app.company);
         if (app.job_description) {
           setJobDescription(app.job_description);
         }
+        return;
       }
     }
-  }, [preSelectedAppId, applications]);
+
+    // Fallback: try to find by company name
+    if (preSelectedCompany && applications.length > 0) {
+      const app = applications.find((a) => a.company.toLowerCase() === preSelectedCompany.toLowerCase());
+      if (app) {
+        console.log('Found app from preSelectedCompany:', app);
+        setSelectedApp(app);
+        setSelectedCompany(app.company);
+        if (app.job_description) {
+          setJobDescription(app.job_description);
+        }
+        return;
+      } else {
+        // If no exact match found, just set the company name
+        console.log('No app found for company:', preSelectedCompany, 'Available apps:', applications.map(a => a.company));
+        setSelectedCompany(preSelectedCompany);
+      }
+    }
+  }, [preSelectedAppId, preSelectedCompany, applications]);
 
   // Calculate keyword count
   useEffect(() => {
@@ -149,6 +169,10 @@ export default function TailoringWorkspace({
 
         {selectedApp && (
           <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200 text-sm">
+            <div className="mb-2">
+              <p className="font-semibold text-gray-900">{selectedApp.company}</p>
+              <p className="text-gray-700">{selectedApp.role}</p>
+            </div>
             <p className="text-gray-700">
               JD stored on <span className="font-semibold">{new Date(selectedApp.applied_date).toLocaleDateString()}</span>
               {!selectedApp.job_description && ' - No JD stored. Paste below.'}
