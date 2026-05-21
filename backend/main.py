@@ -71,7 +71,7 @@ Base = declarative_base()
 class ApplicationTable(Base):
     __tablename__ = "applications"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, index=True)
+    user_id = Column(UUID(as_uuid=True), index=True)
     company = Column(String)
     role = Column(String)
     status = Column(String)
@@ -86,7 +86,7 @@ class ApplicationTable(Base):
 class UserResumeTable(Base):
     __tablename__ = "user_resumes"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, index=True)
+    user_id = Column(UUID(as_uuid=True), index=True)
     resume_text = Column(Text)
     keywords = Column(Text)
     label = Column(String, nullable=True)  # e.g., "Updated October 2026" or "Razorpay SWE Intern"
@@ -126,7 +126,7 @@ class JDFeedbackTable(Base):
 class OpportunityTable(Base):
     __tablename__ = "opportunities"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
     company_name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -180,7 +180,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if user_response.user is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         user = user_response.user
-        return {"email": user.email, "sub": user.id}
+        user_id = uuid.UUID(user.id) if isinstance(user.id, str) else user.id
+        return {"email": user.email, "sub": user_id}
     except Exception as e:
         print(f"Auth error: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")

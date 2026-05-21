@@ -30,7 +30,7 @@ def upgrade() -> None:
             'opportunities',
             sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True,
                       server_default=sa.text("gen_random_uuid()")),
-            sa.Column('user_id', sa.String(), nullable=False),
+            sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column('company_name', sa.String(), nullable=False),
             sa.Column('role', sa.String(), nullable=False),
             sa.Column('description', sa.Text(), nullable=True),
