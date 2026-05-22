@@ -279,7 +279,18 @@ export default function TailoringWorkspace({
 
       {error && (
         <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-sm font-semibold text-red-900 mb-2">Error</p>
+          <p className="text-sm text-red-700 mb-3">{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              handleGenerate();
+            }}
+            disabled={generating || !canGenerate}
+            className="text-sm font-medium text-red-700 hover:text-red-800 underline"
+          >
+            Try Again
+          </button>
         </div>
       )}
     </div>

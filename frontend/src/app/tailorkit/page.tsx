@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 import TailorKitContent from '@/components/tailorkit/TailorKitContent';
 import Sidebar from '@/components/dashboard/Sidebar';
+import { ArrowLeft } from 'lucide-react';
 
 export interface ResumeVersion {
   id: string;
@@ -78,8 +79,19 @@ function TailorKitPageContent() {
     <div className="flex-1 flex flex-col overflow-auto">
       {/* Header */}
       <header className="bg-white shadow-sm px-8 py-4 flex justify-between items-center sticky top-0 z-10">
-        <h1 className="text-2xl font-bold text-gray-900">TailorKit</h1>
-        <p className="text-gray-600">Tailor your resume for each company</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Back to Dashboard</span>
+          </button>
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold text-gray-900">TailorKit</h1>
+            <p className="text-gray-600 text-sm">Tailor your resume for each company</p>
+          </div>
+        </div>
       </header>
 
       {/* Content */}

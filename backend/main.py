@@ -575,12 +575,23 @@ JOB DESCRIPTION:
 
 Please provide the tailored resume (text only, no markdown):"""
 
-        response = genai_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
+        # Add timeout to prevent hanging
+        loop = asyncio.get_event_loop()
+        response = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: genai_client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt
+                )
+            ),
+            timeout=60.0  # 60 second timeout
         )
         tailored_text = response.text.strip()
         return tailored_text
+    except asyncio.TimeoutError:
+        print("Gemini tailoring timed out after 60 seconds")
+        raise Exception("Resume tailoring took too long. Please try again.")
     except Exception as e:
         print(f"Gemini tailoring error: {e}")
         raise
@@ -1274,42 +1285,64 @@ async def tailor_resume(
 ):
     """Tailor a resume for a specific company and job."""
     try:
-        version_uuid = uuid.UUID(request.resume_version_id)
-    except ValueError:
-        raise HTTPException(400, "Invalid version ID format")
-    
-    # Get the resume version
-    stmt = select(UserResumeTable).where(
-        and_(
-            UserResumeTable.id == version_uuid,
-            UserResumeTable.user_id == current_user["sub"]
+        # Validate input
+        if not request.resume_version_id:
+            raise HTTPException(400, "Resume version ID is required")
+        if not request.job_description or not request.job_description.strip():
+            raise HTTPException(400, "Job description is required")
+        if not request.company_name or not request.company_name.strip():
+            raise HTTPException(400, "Company name is required")
+        
+        try:
+            version_uuid = uuid.UUID(request.resume_version_id)
+        except ValueError:
+            raise HTTPException(400, "Invalid version ID format")
+        
+        # Get the resume version
+        stmt = select(UserResumeTable).where(
+            and_(
+                UserResumeTable.id == version_uuid,
+                UserResumeTable.user_id == current_user["sub"]
+            )
         )
-    )
-    result = await db.execute(stmt)
-    resume_version = result.scalar_one_or_none()
-    
-    if not resume_version:
-        raise HTTPException(404, "Resume version not found")
-    
-    # Call Gemini to tailor the resume
-    tailored_text = await tailor_resume_with_gemini(
-        resume_version.resume_text,
-        request.job_description,
-        request.company_name
-    )
-    
-    # Calculate match scores
-    original_match = calculate_keyword_match_percent(resume_version.resume_text, request.job_description)
-    tailored_match = calculate_keyword_match_percent(tailored_text, request.job_description)
-    
-    return {
-        "original_resume": resume_version.resume_text,
-        "tailored_resume": tailored_text,
-        "original_match": round(original_match),
-        "tailored_match": round(tailored_match),
-        "match_improvement": round(tailored_match - original_match),
-        "company_name": request.company_name
-    }
+        result = await db.execute(stmt)
+        resume_version = result.scalar_one_or_none()
+        
+        if not resume_version:
+            raise HTTPException(404, "Resume version not found")
+        
+        if not resume_version.resume_text or not resume_version.resume_text.strip():
+            raise HTTPException(400, "Resume version is empty")
+        
+        # Call Gemini to tailor the resume
+        try:
+            tailored_text = await tailor_resume_with_gemini(
+                resume_version.resume_text,
+                request.job_description,
+                request.company_name
+            )
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Gemini API error: {error_msg}")
+            raise HTTPException(500, f"Failed to generate tailored resume: {error_msg}")
+        
+        # Calculate match scores
+        original_match = calculate_keyword_match_percent(resume_version.resume_text, request.job_description)
+        tailored_match = calculate_keyword_match_percent(tailored_text, request.job_description)
+        
+        return {
+            "original_resume": resume_version.resume_text,
+            "tailored_resume": tailored_text,
+            "original_match": round(original_match),
+            "tailored_match": round(tailored_match),
+            "match_improvement": round(tailored_match - original_match),
+            "company_name": request.company_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Unexpected error in tailor_resume: {e}")
+        raise HTTPException(500, "An unexpected error occurred while tailoring your resume")
 
 class SaveTailoredResumeRequest(BaseModel):
     tailored_text: str
