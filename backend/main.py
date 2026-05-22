@@ -1324,6 +1324,14 @@ async def tailor_resume(
         except Exception as e:
             error_msg = str(e)
             print(f"Gemini API error: {error_msg}")
+            
+            # Check for rate limit/quota errors
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                raise HTTPException(
+                    status_code=429,
+                    detail="AI quota exceeded. Please try again in a few hours."
+                )
+            
             raise HTTPException(500, f"Failed to generate tailored resume: {error_msg}")
         
         # Calculate match scores

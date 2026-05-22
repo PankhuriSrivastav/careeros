@@ -125,7 +125,12 @@ export default function TailoringWorkspace({
 
       onTailorComplete(result);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to tailor resume');
+      // Handle 429 quota exceeded errors
+      if (err.response?.status === 429) {
+        setError('AI is temporarily unavailable due to high usage. Please try again in a few hours.');
+      } else {
+        setError(err.response?.data?.detail || 'Failed to tailor resume');
+      }
       console.error(err);
     } finally {
       setGenerating(false);
