@@ -165,8 +165,9 @@ app.default_response_class = CustomJSONResponse
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://careeros-ny7q.vercel.app",
         "https://careeros-beta.vercel.app",
-        "http://localhost:3000",  # For local development
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
