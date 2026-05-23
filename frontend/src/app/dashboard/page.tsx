@@ -7,15 +7,28 @@ import Sidebar from '@/components/dashboard/Sidebar';
 import ApplicationsTab from '@/components/dashboard/ApplicationsTab';
 import ResumeAnalyzerTab from '@/components/dashboard/ResumeAnalyzerTab';
 import JobMatcherTab from '@/components/dashboard/JobMatcherTab';
+import TailorKitContent from '@/components/tailorkit/TailorKitContent';
 import AnalyticsPage from './analytics/page';
 import SkillGapAnalyzerPage from './skill-gap/page';
-import OpportunitiesPage from './opportunities/page'; // 🆕
+import OpportunitiesPage from './opportunities/page';
+
+export interface ResumeVersion {
+  id: string;
+  label: string;
+  ats_score: number | null;
+  score_diff: number | null;
+  upload_date: string;
+  is_tailored: boolean;
+  tailored_for_company: string | null;
+  created_at: string;
+}
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<
-    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' // 🆕
+    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit'
   >('applications');
   const [applications, setApplications] = useState<JobApplication[]>([]);
+  const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -23,16 +36,21 @@ export default function DashboardPage() {
     if (!apiService.isAuthenticated()) {
       router.push('/login');
     } else {
-      loadApplications();
+      loadData();
     }
   }, []);
 
-  const loadApplications = async () => {
+  const loadData = async () => {
     try {
-      const data = await apiService.getApplications();
-      setApplications(data);
+      setLoading(true);
+      const [appsData, versionsData] = await Promise.all([
+        apiService.getApplications(),
+        apiService.getResumeVersions(),
+      ]);
+      setApplications(appsData);
+      setResumeVersions(versionsData);
     } catch (error: any) {
-      console.error('Error loading applications:', error);
+      console.error('Error loading dashboard data:', error);
       if (error?.response?.status === 401) {
         apiService.logout();
         router.push('/login');
@@ -50,12 +68,12 @@ export default function DashboardPage() {
       applied_date: new Date().toISOString().split('T')[0],
     };
     await apiService.createApplication(newApp);
-    await loadApplications();
+    await loadData();
   };
 
   const handleDeleteApplication = async (id: string) => {
     await apiService.deleteApplication(id);
-    await loadApplications();
+    await loadData();
   };
 
   const handleUpdateApplication = async (id: string, app: Omit<JobApplication, 'id'>) => {
@@ -63,7 +81,7 @@ export default function DashboardPage() {
       console.log('🔄 Updating application:', { id, ...app });
       await apiService.updateApplication(id, app);
       console.log('✅ Update successful, reloading...');
-      await loadApplications();
+      await loadData();
     } catch (error: any) {
       const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to update application';
       console.error('❌ Update error:', error);
@@ -104,7 +122,8 @@ export default function DashboardPage() {
             {activeTab === 'match' && 'Job Matcher'}
             {activeTab === 'analytics' && 'Analytics Dashboard'}
             {activeTab === 'skill-gap' && 'Skill Gap Analyzer'}
-            {activeTab === 'opportunities' && 'Opportunity Finder'} {/* 🆕 */}
+            {activeTab === 'opportunities' && 'Opportunity Finder'}
+            {activeTab === 'tailorkit' && 'TailorKit'}
           </h1>
           <button
             onClick={handleLogout}
@@ -135,8 +154,17 @@ export default function DashboardPage() {
           {activeTab === 'skill-gap' && (
             <SkillGapAnalyzerPage />
           )}
-          {activeTab === 'opportunities' && (     // 🆕
+          {activeTab === 'opportunities' && (
             <OpportunitiesPage />
+          )}
+          {activeTab === 'tailorkit' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <TailorKitContent
+                versions={resumeVersions}
+                applications={applications}
+                onVersionsUpdated={setResumeVersions}
+              />
+            </div>
           )}
         </div>
       </div>
