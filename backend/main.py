@@ -19,10 +19,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from PyPDF2 import PdfReader
 from collections import Counter
-try:
-    from ddgs import DDGS
-except ImportError:
-    from duckduckgo_search import DDGS  # legacy fallback
+from ddgs import DDGS
 import httpx
 from urllib.parse import quote_plus
 from opportunity_sources import gather_opportunity_listings
@@ -680,7 +677,7 @@ def _parse_ddg_result(row: dict) -> Optional[dict]:
 def _run_ddg_search(query: str, region: str, max_results: int, timelimit: Optional[str] = None) -> List[dict]:
     results: List[dict] = []
     kwargs = {
-        "keywords": query,
+        "query": query,
         "region": region,
         "safesearch": "moderate",
         "max_results": max_results,
@@ -700,18 +697,6 @@ def _run_ddg_search(query: str, region: str, max_results: int, timelimit: Option
             return results
     except Exception as e:
         print(f"ddgs package search failed: {e}")
-
-    try:
-        from duckduckgo_search import DDGS as LegacyDDGS
-        with LegacyDDGS() as ddgs:
-            legacy_kwargs = dict(kwargs)
-            legacy_kwargs["backend"] = "html"
-            for row in ddgs.text(**legacy_kwargs):
-                parsed = _parse_ddg_result(row)
-                if parsed:
-                    results.append(parsed)
-    except Exception as e:
-        print(f"legacy duckduckgo-search failed: {e}")
 
     return results
 
@@ -2074,11 +2059,11 @@ async def search_professionals(
         if vit_match:
             user_college = "VIT"
     
-    # Build 3-4 search queries targeting LinkedIn profiles
+    # Build 3-4 search queries targeting LinkedIn profiles (no site: to avoid blocking)
     queries = [
-        f"{role} at {company} LinkedIn profile",
-        f"{company} {role} engineer site:linkedin.com",
-        f"professionals working at {company} {role}",
+        f'linkedin "{company}" "{role}" India profile',
+        f'linkedin.com/in "{company}" engineer India',
+        f'"{company}" "{role}" India linkedin profile',
     ]
     
     # Run searches in parallel
