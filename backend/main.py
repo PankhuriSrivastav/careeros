@@ -1942,31 +1942,49 @@ def _fallback_message_template(
     
     return f"{intro}\n\n{body}\n\nNo pressure to respond — just wanted to connect!\n\nBest,\n{user_name}"
 
-def _rank_profiles(profiles: List[dict], user_college: str) -> List[dict]:
+def _rank_profiles(profiles: List[dict], user_college: str):
     """
-    Multi-signal ranking — scores each profile on 5 dimensions.
-    Higher score = shown first.
+    Filter interns/contractors FIRST, then multi-signal rank.
+    Returns (eligible_profiles, filtered_count).
     """
     current_year = datetime.utcnow().year
     tier_2_colleges = {"NIT", "BITS", "MANIPAL", "SRM", "IIIT", "DTU", "NSIT"}
 
+    # Signals that indicate someone CANNOT refer
+    ineligible_signals = [
+        "intern", "internship", "contractor", "contract",
+        "student", "trainee", "apprentice", "part-time",
+        "freelance", "freelancer", "consultant"
+    ]
+
+    eligible = []
+    filtered_count = 0
+
     for profile in profiles:
+        snippet = (profile.get("snippet") or "").lower()
+        name = (profile.get("name") or "").lower()
+
+        # Filter out interns and contractors
+        if any(signal in snippet or signal in name
+               for signal in ineligible_signals):
+            filtered_count += 1
+            continue
+
+        # Multi-signal scoring
         score = 0
         college = (profile.get("college") or "").upper()
         yoe = profile.get("yoe") or 0
-        snippet = (profile.get("snippet") or "").lower()
-        name = (profile.get("name") or "").lower()
         url = (profile.get("url") or "").lower()
 
-        # Signal 1 — Same college (highest weight)
+        # Signal 1 — Same college
         if user_college.upper() in college and college:
             score += 50
 
-        # Signal 2 — Tier 2 college match
+        # Signal 2 — Tier 2 college
         elif any(tc in college for tc in tier_2_colleges):
             score += 20
 
-        # Signal 3 — YoE sweet spot (1-4 years)
+        # Signal 3 — YoE sweet spot 1-4 years
         if 1 <= yoe <= 4:
             score += 30
         elif 5 <= yoe <= 7:
@@ -1974,37 +1992,39 @@ def _rank_profiles(profiles: List[dict], user_college: str) -> List[dict]:
         elif yoe > 7:
             score += 5
 
-        # Signal 4 — Currently at company (not "former" or "ex")
+        # Signal 4 — Not a former employee
         if "former" not in snippet and "ex-" not in snippet and "previously" not in snippet:
             score += 20
         else:
-            score -= 30  # Penalize likely stale profiles heavily
+            score -= 30
 
-        # Signal 5 — Role relevance
+        # Signal 5 — Engineering role
         role_keywords = ["engineer", "developer", "sde", "swe", "software", "tech"]
         if any(kw in snippet for kw in role_keywords):
             score += 10
 
-        # Signal 6 — Indian name signal (common Indian name patterns)
-        indian_suffixes = ["kumar", "sharma", "singh", "gupta", "patel", "jain",
-                          "agarwal", "mishra", "verma", "yadav", "reddy", "nair",
-                          "iyer", "pillai", "menon", "rao", "bhat", "joshi"]
+        # Signal 6 — Indian name
+        indian_suffixes = [
+            "kumar", "sharma", "singh", "gupta", "patel", "jain",
+            "agarwal", "mishra", "verma", "yadav", "reddy", "nair",
+            "iyer", "pillai", "menon", "rao", "bhat", "joshi"
+        ]
         if any(suffix in name for suffix in indian_suffixes):
             score += 10
 
-        # Signal 7 — Profile URL quality (individual profile vs search page)
+        # Signal 7 — Direct profile URL
         if "/in/" in url:
-            score += 15  # Direct profile link
+            score += 15
         elif "search" in url:
-            score -= 20  # Search page, not useful
+            score -= 20
 
         profile["score"] = score
-        # Keep tier for backwards compatibility
         profile["tier"] = 1 if score >= 80 else 2 if score >= 40 else 3
+        eligible.append(profile)
 
     # Sort by score descending
-    profiles.sort(key=lambda p: p.get("score", 0), reverse=True)
-    return profiles
+    eligible.sort(key=lambda p: p.get("score", 0), reverse=True)
+    return eligible, filtered_count
 
 def _parse_profile_from_ddg(result: dict, user_college: str) -> Optional[dict]:
     """
@@ -2117,8 +2137,8 @@ async def search_professionals(
             if profile:
                 profiles.append(profile)
     
-    # Rank profiles
-    ranked_profiles = _rank_profiles(profiles, user_college)
+    # Rank profiles (filters interns/contractors)
+    ranked_profiles, filtered_count = _rank_profiles(profiles, user_college)
     
     # Return top 8-10
     top_profiles = ranked_profiles[:10]
@@ -2133,11 +2153,14 @@ async def search_professionals(
                 "yoe_estimate": p.get("yoe"),
                 "profile_url": p["url"],
                 "snippet": p["snippet"][:200],
-                "tier": p["tier"]
+                "tier": p["tier"],
+                "score": p.get("score", 0)
             }
             for p in top_profiles
         ],
         "total_found": len(ranked_profiles),
+        "filtered_count": filtered_count,
+        "total_before_filter": len(ranked_profiles) + filtered_count,
         "disclaimer": "Profiles found via public search. Verify on LinkedIn — role may have changed."
     }
 

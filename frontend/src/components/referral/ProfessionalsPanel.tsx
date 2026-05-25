@@ -17,6 +17,7 @@ interface Profile {
   profile_url: string;
   snippet: string;
   tier: number;
+  score?: number;
 }
 
 export default function ProfessionalsPanel({
@@ -25,6 +26,7 @@ export default function ProfessionalsPanel({
   application_id,
 }: ProfessionalsPanelProps) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [filteredCount, setFilteredCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
@@ -37,6 +39,7 @@ export default function ProfessionalsPanel({
       try {
         const data = await searchProfessionals(company, role);
         setProfiles(data.profiles || []);
+        setFilteredCount(data.filtered_count || 0);
       } catch (err) {
         console.error('Failed to search professionals:', err);
         setError('Failed to search for professionals. Please try again.');
@@ -88,6 +91,11 @@ export default function ProfessionalsPanel({
           </button>
         </div>
         <p className="text-gray-600 text-sm">{role}</p>
+        {filteredCount > 0 && (
+          <p className="text-xs text-gray-400 mt-2">
+            {profiles.length + filteredCount} found · {filteredCount} filtered (interns/contractors who cannot refer)
+          </p>
+        )}
       </div>
 
       {/* Content */}
