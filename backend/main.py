@@ -136,6 +136,21 @@ class OpportunityTable(Base):
     match_percent = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class ReferralOutreachTable(Base):
+    __tablename__ = "referral_outreach"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    application_id = Column(UUID(as_uuid=True), nullable=True)  # Links to applications table
+    company = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    profile_url = Column(String, nullable=False)
+    profile_name = Column(String, nullable=False)
+    profile_college = Column(String, nullable=True)
+    message_drafted = Column(Text, nullable=False)
+    status = Column(String, default="Draft")  # Draft / Sent / Responded / Referred / Declined
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # Tables managed by Alembic — no manual creation
 async def init_db():
     pass
@@ -240,6 +255,36 @@ class TrackOpportunityRequest(BaseModel):
     description: Optional[str] = None
     trust_score: Optional[int] = 100
     match_percent: Optional[int] = 0
+
+class DraftMessageRequest(BaseModel):
+    profile_name: str
+    profile_college: Optional[str] = None
+    profile_yoe: Optional[int] = None
+    company: str
+    role: str
+    user_name: str
+    user_college: str
+    user_project: Optional[str] = "CareerOS"
+
+class TrackReferralRequest(BaseModel):
+    application_id: Optional[str] = None
+    company: str
+    role: str
+    profile_url: str
+    profile_name: str
+    profile_college: Optional[str] = None
+    message_drafted: str
+
+class UpdateReferralStatusRequest(BaseModel):
+    status: str  # Draft / Sent / Responded / Referred / Declined
+
+class ReferralProfile(BaseModel):
+    name: str
+    college: Optional[str] = None
+    yoe_estimate: Optional[int] = None
+    url: str
+    snippet: str
+    tier: int  # 1, 2, 3 for ranking
 
 # ---------- Helper Functions ----------
 IDEAL_SKILLS = {
@@ -1829,4 +1874,436 @@ async def get_analytics(
             if apps_list else 0, 1
         )
     }
+
+# ---------- Referral Finder Endpoints ----------
+
+async def _draft_message_with_gemini(
+    profile_name: str,
+    profile_college: Optional[str],
+    profile_yoe: Optional[int],
+    company: str,
+    role: str,
+    user_name: str,
+    user_college: str,
+    user_project: str
+) -> str:
+    """
+    Draft a personalized LinkedIn outreach message using Gemini.
+    Returns at most 5 lines — lead with college if shared, mention real project, end with "no pressure".
+    Falls back to template if Gemini unavailable or quota exceeded.
+    """
+    if genai_client is None:
+        # Fallback template when Gemini not available
+        return _fallback_message_template(
+            profile_name, profile_college, company, role, user_name, user_college, user_project
+        )
+    
+    try:
+        shared_college = "Yes" if profile_college and user_college.lower() in profile_college.lower() else "No"
+        
+        prompt = f"""Draft a short LinkedIn outreach message (max 5 lines). Be authentic, no flattery.
+
+Rules:
+- If shared college: Lead with college connection ("I saw you also attended VIT...")
+- Mention the specific project: {user_project}
+- End with "no pressure to respond"
+- Keep it genuine and brief
+- No fake compliments
+
+Profile: {profile_name} at {company}, {role}, graduated ~{profile_yoe or '?'} years ago
+Shared college: {shared_college}
+You: {user_name} from {user_college}
+Project: {user_project}
+
+Message:"""
+
+        response = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        message = response.text.strip()
+        # Ensure message ends with "no pressure" or similar
+        if "no pressure" not in message.lower():
+            message += "\n\nNo pressure to respond — just thought we could connect!"
+        return message
+    except Exception as e:
+        print(f"Gemini message draft error: {e}")
+        # Fallback to template on any error (rate limit, quota, etc.)
+        return _fallback_message_template(
+            profile_name, profile_college, company, role, user_name, user_college, user_project
+        )
+
+def _fallback_message_template(
+    profile_name: str,
+    profile_college: Optional[str],
+    company: str,
+    role: str,
+    user_name: str,
+    user_college: str,
+    user_project: str
+) -> str:
+    """
+    Fallback message template when Gemini is unavailable.
+    Always returns a clean, 5-line message without AI.
+    """
+    intro = f"Hi {profile_name.split()[0]},"
+    
+    # College line if shared
+    college_line = ""
+    if profile_college and user_college.lower() in profile_college.lower():
+        college_line = f"I noticed you're a {user_college} alum too! "
+    
+    body = f"{college_line}I'm interested in {role} roles at {company} and would love to learn about your experience. I've built {user_project} and would appreciate any insights you could share."
+    
+    return f"{intro}\n\n{body}\n\nNo pressure to respond — just wanted to connect!\n\nBest,\n{user_name}"
+
+def _rank_profiles(profiles: List[dict], user_college: str) -> List[dict]:
+    """
+    Rank profiles by college match and YoE.
+    Tier 1: VIT alumni (if user is VIT), grad 2020-2024
+    Tier 2: Other tier-2 college alumni, grad 2019-2022
+    Tier 3: Any Indian engineer
+    """
+    tier_2_colleges = {"NIT", "BITS", "Manipal", "SRM", "IIIT"}
+    current_year = datetime.utcnow().year
+    
+    for profile in profiles:
+        tier = 3  # Default tier
+        college = profile.get("college", "").upper()
+        yoe = profile.get("yoe", 0)
+        
+        # Tier 1: VIT alumni if user is VIT
+        if "VIT" in user_college.upper() and "VIT" in college:
+            if 2020 <= (current_year - yoe) <= 2024:
+                tier = 1
+        
+        # Tier 2: Other tier-2 college alumni
+        if tier == 3:
+            if any(tc in college for tc in tier_2_colleges):
+                if 2019 <= (current_year - yoe) <= 2022:
+                    tier = 2
+        
+        profile["tier"] = tier
+    
+    # Sort by tier (ascending, so tier 1 first), then by YoE (prefer 1-4 years)
+    def sort_key(p):
+        tier = p.get("tier", 3)
+        yoe = p.get("yoe", 999)
+        yoe_distance = abs(yoe - 2)  # Prefer 2 years of experience
+        return (tier, yoe_distance)
+    
+    profiles.sort(key=sort_key)
+    return profiles
+
+def _parse_profile_from_ddg(result: dict, user_college: str) -> Optional[dict]:
+    """
+    Parse a DuckDuckGo search result into a profile object.
+    Extracts: name, college (if detected), YoE estimate, URL, snippet.
+    """
+    title = result.get("title", "")
+    snippet = result.get("snippet", "")
+    url = result.get("url", "")
+    
+    if not url or "linkedin" not in url.lower():
+        return None
+    
+    # Extract name from title (usually first 1-3 words)
+    name_parts = title.split("|")[0].split("—")[0].split("-")[0].strip().split()[:3]
+    name = " ".join(name_parts) if name_parts else "Professional"
+    
+    # Detect college from snippet
+    college = None
+    college_keywords = {
+        "VIT": ["VIT", "Vellore"],
+        "IIT": ["IIT", "Indian Institute of Technology"],
+        "NIT": ["NIT", "National Institute of Technology"],
+        "BITS": ["BITS", "Pilani"],
+        "Manipal": ["Manipal", "MIT"],
+        "SRM": ["SRM", "Chennai"],
+        "IIIT": ["IIIT", "International Institute"],
+    }
+    for col, keywords in college_keywords.items():
+        if any(kw.lower() in snippet.lower() for kw in keywords):
+            college = col
+            break
+    
+    # Estimate YoE from snippet (look for "20XX-20YY" patterns or "X years")
+    yoe = None
+    yoe_match = re.search(r"(\d+)\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp)", snippet, re.IGNORECASE)
+    if yoe_match:
+        yoe = int(yoe_match.group(1))
+    else:
+        # Try to extract from graduation year
+        grad_match = re.search(r"(20\d{2})", snippet)
+        if grad_match:
+            grad_year = int(grad_match.group(1))
+            yoe = datetime.utcnow().year - grad_year
+    
+    return {
+        "name": name,
+        "college": college,
+        "yoe": yoe or 0,
+        "url": url,
+        "snippet": snippet,
+        "tier": 3  # Will be updated by ranking function
+    }
+
+@app.get("/api/referral/search")
+async def search_professionals(
+    company: str = Query(..., description="Target company"),
+    role: str = Query(..., description="Target role"),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Search for professionals at a target company.
+    Returns top 8-10 ranked profiles found via DuckDuckGo.
+    """
+    # Get user's college for ranking preference
+    # (For now, assume from resume or default to any college)
+    user_college = "Any"
+    stmt = select(UserResumeTable).where(
+        UserResumeTable.user_id == current_user["sub"]
+    ).order_by(desc(UserResumeTable.created_at))
+    result = await db.execute(stmt)
+    latest_resume = result.scalars().first()
+    if latest_resume:
+        resume_text = latest_resume.resume_text or ""
+        # Try to detect college from resume text
+        vit_match = re.search(r"Vellore|VIT", resume_text, re.IGNORECASE)
+        if vit_match:
+            user_college = "VIT"
+    
+    # Build 3-4 search queries targeting LinkedIn profiles
+    queries = [
+        f"{role} at {company} LinkedIn profile",
+        f"{company} {role} engineer site:linkedin.com",
+        f"professionals working at {company} {role}",
+    ]
+    
+    # Run searches in parallel
+    all_results = []
+    for query in queries:
+        try:
+            results = await search_duckduckgo(query, max_results=5)
+            all_results.extend(results)
+        except Exception as e:
+            print(f"Search error for query '{query}': {e}")
+    
+    # Parse and dedupe profiles
+    profiles = []
+    seen_urls = set()
+    for result in all_results:
+        url = result.get("url", "")
+        if url not in seen_urls:
+            seen_urls.add(url)
+            profile = _parse_profile_from_ddg(result, user_college)
+            if profile:
+                profiles.append(profile)
+    
+    # Rank profiles
+    ranked_profiles = _rank_profiles(profiles, user_college)
+    
+    # Return top 8-10
+    top_profiles = ranked_profiles[:10]
+    
+    return {
+        "company": company,
+        "role": role,
+        "profiles": [
+            {
+                "name": p["name"],
+                "college": p.get("college"),
+                "yoe_estimate": p.get("yoe"),
+                "profile_url": p["url"],
+                "snippet": p["snippet"][:200],
+                "tier": p["tier"]
+            }
+            for p in top_profiles
+        ],
+        "total_found": len(ranked_profiles),
+        "disclaimer": "Profiles found via public search. Verify on LinkedIn — role may have changed."
+    }
+
+@app.post("/api/referral/draft")
+async def draft_outreach_message(
+    request: DraftMessageRequest,
+    current_user=Depends(get_current_user)
+):
+    """
+    Draft a personalized LinkedIn outreach message using Gemini.
+    Max 5 lines, no fake flattery, lead with college if applicable.
+    """
+    message = await _draft_message_with_gemini(
+        profile_name=request.profile_name,
+        profile_college=request.profile_college,
+        profile_yoe=request.profile_yoe,
+        company=request.company,
+        role=request.role,
+        user_name=request.user_name,
+        user_college=request.user_college,
+        user_project=request.user_project
+    )
+    
+    return {
+        "profile_name": request.profile_name,
+        "company": request.company,
+        "role": request.role,
+        "message_drafted": message,
+        "character_count": len(message),
+        "disclaimer": "Edit message before sending. This is AI-drafted and should be reviewed for accuracy."
+    }
+
+@app.post("/api/referral/track")
+async def save_referral_outreach(
+    request: TrackReferralRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save a referral outreach attempt to the database.
+    Links to an application if provided.
+    """
+    # Parse application ID if provided
+    app_id = None
+    if request.application_id:
+        try:
+            app_id = uuid.UUID(request.application_id)
+        except ValueError:
+            pass
+    
+    # Create outreach record with "Sent" status
+    outreach = ReferralOutreachTable(
+        user_id=current_user["sub"],
+        application_id=app_id,
+        company=request.company,
+        role=request.role,
+        profile_url=request.profile_url,
+        profile_name=request.profile_name,
+        profile_college=request.profile_college,
+        message_drafted=request.message_drafted,
+        status="Sent"
+    )
+    db.add(outreach)
+    try:
+        await db.flush()
+        await db.commit()
+        await db.refresh(outreach)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(500, f"Failed to save outreach: {str(e)}")
+    
+    return {
+        "message": "Outreach saved",
+        "outreach_id": str(outreach.id),
+        "company": outreach.company,
+        "profile_name": outreach.profile_name,
+        "status": outreach.status
+    }
+
+@app.put("/api/referral/track/{outreach_id}")
+async def update_referral_status(
+    outreach_id: str,
+    request: UpdateReferralStatusRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update the status of a referral outreach attempt.
+    Status: Draft / Sent / Responded / Referred / Declined
+    """
+    # Parse outreach ID
+    try:
+        outreach_uuid = uuid.UUID(outreach_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid outreach ID")
+    
+    # Fetch outreach
+    stmt = select(ReferralOutreachTable).where(
+        and_(
+            ReferralOutreachTable.id == outreach_uuid,
+            ReferralOutreachTable.user_id == current_user["sub"]
+        )
+    )
+    result = await db.execute(stmt)
+    outreach = result.scalar_one_or_none()
+    
+    if not outreach:
+        raise HTTPException(404, "Outreach record not found")
+    
+    # Validate status
+    valid_statuses = ["Draft", "Sent", "Responded", "Referred", "Declined"]
+    if request.status not in valid_statuses:
+        raise HTTPException(400, f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    
+    # Update status and timestamp
+    outreach.status = request.status
+    outreach.updated_at = datetime.utcnow()
+    
+    try:
+        await db.commit()
+        await db.refresh(outreach)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(500, f"Failed to update status: {str(e)}")
+    
+    return {
+        "message": "Status updated",
+        "outreach_id": str(outreach.id),
+        "status": outreach.status,
+        "updated_at": outreach.updated_at.isoformat()
+    }
+
+@app.get("/api/referral/history")
+async def get_referral_history(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all referral attempts for the current user, grouped by company.
+    """
+    stmt = select(ReferralOutreachTable).where(
+        ReferralOutreachTable.user_id == current_user["sub"]
+    ).order_by(desc(ReferralOutreachTable.created_at))
+    
+    result = await db.execute(stmt)
+    outreaches = result.scalars().all()
+    
+    # Group by company
+    by_company = {}
+    for outreach in outreaches:
+        company = outreach.company
+        if company not in by_company:
+            by_company[company] = []
+        
+        by_company[company].append({
+            "id": str(outreach.id),
+            "profile_name": outreach.profile_name,
+            "role": outreach.role,
+            "status": outreach.status,
+            "profile_url": outreach.profile_url,
+            "created_at": outreach.created_at.isoformat() if outreach.created_at else None,
+            "updated_at": outreach.updated_at.isoformat() if outreach.updated_at else None
+        })
+    
+    # Calculate summary stats
+    total_sent = sum(1 for o in outreaches if o.status == "Sent")
+    total_responded = sum(1 for o in outreaches if o.status == "Responded")
+    total_referred = sum(1 for o in outreaches if o.status == "Referred")
+    
+    response_rate = round((total_responded / total_sent * 100) if total_sent > 0 else 0, 1)
+    referral_rate = round((total_referred / total_sent * 100) if total_sent > 0 else 0, 1)
+    
+    return {
+        "by_company": by_company,
+        "summary": {
+            "total_outreaches": len(outreaches),
+            "total_sent": total_sent,
+            "total_responded": total_responded,
+            "total_referred": total_referred,
+            "response_rate": response_rate,
+            "referral_conversion_rate": referral_rate
+        }
+    }
+
 # uvicorn main:app --reload --port 8000

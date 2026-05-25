@@ -125,12 +125,20 @@ export default function DashboardPage() {
             {activeTab === 'opportunities' && 'Opportunity Finder'}
             {activeTab === 'tailorkit' && 'TailorKit'}
           </h1>
-          <button
-            onClick={handleLogout}
-            className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
-          >
-            Logout
-          </button>
+          <div className="flex items-center space-x-3">
+            <a
+              href="/referral-finder"
+              className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition font-medium text-sm"
+            >
+              🤝 Referral Finder
+            </a>
+            <button
+              onClick={handleLogout}
+              className="flex items-center space-x-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition font-medium"
+            >
+              Logout
+            </button>
+          </div>
         </header>
 
         <div className="p-8">

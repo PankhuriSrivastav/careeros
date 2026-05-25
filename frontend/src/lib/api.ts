@@ -161,4 +161,68 @@ export const apiService = {
     });
     return response.data;
   },
+
+  // Referral Finder
+  async searchProfessionals(company: string, role: string) {
+    const response = await api.get('/api/referral/search', {
+      params: { company, role },
+    });
+    return response.data;
+  },
+
+  async draftMessage(payload: {
+    profile_name: string;
+    profile_college?: string;
+    profile_yoe?: number;
+    company: string;
+    role: string;
+    user_name: string;
+    user_college: string;
+    user_project?: string;
+  }) {
+    const response = await api.post('/api/referral/draft', payload);
+    return response.data;
+  },
+
+  async trackReferral(payload: {
+    application_id?: string;
+    company: string;
+    role: string;
+    profile_url: string;
+    profile_name: string;
+    profile_college?: string;
+    message_drafted: string;
+  }) {
+    const response = await api.post('/api/referral/track', payload);
+    return response.data;
+  },
+
+  async updateReferralStatus(outreachId: string, status: string) {
+    const response = await api.put(`/api/referral/track/${outreachId}`, { status });
+    return response.data;
+  },
+
+  async getReferralHistory() {
+    const response = await api.get('/api/referral/history');
+    return response.data;
+  },
 };
+
+// Convenience exports for direct usage
+export const getApplications = apiService.getApplications;
+export const createApplication = apiService.createApplication;
+export const updateApplication = apiService.updateApplication;
+export const deleteApplication = apiService.deleteApplication;
+export const analyzeResume = apiService.analyzeResume;
+export const matchJob = apiService.matchJob;
+export const searchOpportunities = apiService.searchOpportunities;
+export const getSavedOpportunities = apiService.getSavedOpportunities;
+export const trackOpportunity = apiService.trackOpportunity;
+export const getResumeVersions = apiService.getResumeVersions;
+export const tailorResume = apiService.tailorResume;
+export const saveTailoredResume = apiService.saveTailoredResume;
+export const searchProfessionals = apiService.searchProfessionals;
+export const draftMessage = apiService.draftMessage;
+export const trackReferral = apiService.trackReferral;
+export const updateReferralStatus = apiService.updateReferralStatus;
+export const getReferralHistory = apiService.getReferralHistory;
