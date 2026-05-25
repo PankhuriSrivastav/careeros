@@ -2,12 +2,12 @@
 
 import {
   LayoutDashboard, FileText, Target, LogOut, BarChart3,
-  TrendingUp, Briefcase, Wand2
+  TrendingUp, Briefcase, Wand2, Zap
 } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit';
-  onTabChange: (tab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit') => void;
+  activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel';
+  onTabChange: (tab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel') => void;
   onLogout: () => void;
 }
 
@@ -83,6 +83,16 @@ export default function Sidebar({ activeTab, onTabChange, onLogout }: SidebarPro
         >
           <Briefcase className="w-5 h-5" />
           <span>Opportunities</span>
+        </button>
+        {/* 🆕 Coding Round Intel Tab */}
+        <button
+          onClick={() => onTabChange('coding-intel')}
+          className={`w-full flex items-center space-x-3 px-4 py-2 rounded-lg transition ${
+            activeTab === 'coding-intel' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Zap className="w-5 h-5" />
+          <span>Coding Intel</span>
         </button>
       </nav>
       <div className="p-4 border-t">

@@ -23,6 +23,8 @@ from ddgs import DDGS
 import httpx
 from urllib.parse import quote_plus
 from opportunity_sources import gather_opportunity_listings
+import csv
+from datetime import datetime as dt
 
 load_dotenv()
 
@@ -145,6 +147,18 @@ class ReferralOutreachTable(Base):
     profile_college = Column(String, nullable=True)
     message_drafted = Column(Text, nullable=False)
     status = Column(String, default="Draft")  # Draft / Sent / Responded / Referred / Declined
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class CodingProfileTable(Base):
+    __tablename__ = "coding_profiles"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    source = Column(String, nullable=False)  # "leetcode", "hackerrank", "manual", "combined"
+    topic_counts = Column(Text, nullable=False)  # JSON: {"topic": count, ...}
+    difficulty_breakdown = Column(Text, nullable=False)  # JSON: {"topic": {"easy": X, "medium": Y, "hard": Z}, ...}
+    total_solved = Column(Integer, nullable=False)
+    weekly_pace = Column(String, nullable=True)  # JSON: weekly solving pace in float
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -2344,5 +2358,506 @@ async def get_referral_history(
             "referral_conversion_rate": referral_rate
         }
     }
+
+# ========== CODING ROUND INTEL ==========
+
+# Topic normalization mapping
+TOPIC_NORMALIZATION = {
+    "Dynamic Programming": ["DP", "Dynamic Programming"],
+    "Trees": ["Tree", "Binary Tree", "Binary Search Tree"],
+    "Graphs": ["Graph", "BFS", "DFS", "Graph Theory"],
+    "Arrays": ["Array"],
+    "Linked Lists": ["Linked List"],
+    "Binary Search": ["Binary Search", "Search"],
+    "Sorting": ["Sorting"],
+    "Hashmaps": ["Hash Table", "Hash Map", "Dictionaries and Hashmaps"],
+    "Strings": ["String"],
+    "Recursion": ["Recursion", "Backtracking"],
+    "Heaps": ["Heap", "Priority Queue"],
+    "Tries": ["Trie"],
+    "Greedy": ["Greedy"],
+    "Math/Bit Manipulation": ["Math", "Bit Manipulation", "Bit"],
+    "Stack/Queue": ["Stack", "Queue", "Monotonic Stack"]
+}
+
+# Pydantic models for coding-intel
+class TopicCount(BaseModel):
+    topic: str
+    count: int
+    difficulty_breakdown: dict = {"easy": 0, "medium": 0, "hard": 0}
+
+class CodingProfileResponse(BaseModel):
+    source: str
+    topic_counts: dict
+    difficulty_breakdown: dict
+    total_solved: int
+    weekly_pace: Optional[float] = None
+
+class GapAnalysisRequest(BaseModel):
+    companies: List[str]
+    profile_id: Optional[int] = None
+
+class TopicGap(BaseModel):
+    topic: str
+    user_solved: int
+    company_expected: int
+    coverage_percent: float
+    status: str  # "covered", "partial", "critical"
+    priority: int
+    companies_needing: List[str]
+    weeks_to_close: Optional[float] = None
+
+class GapAnalysisResponse(BaseModel):
+    critical_gaps: List[TopicGap]
+    partial_gaps: List[TopicGap]
+    covered_topics: List[TopicGap]
+    summary: dict
+
+class StudyPlanRequest(BaseModel):
+    weeks_until_interview: int
+    hours_per_day: float
+    company: str
+    critical_gaps: List[TopicGap]
+
+def normalize_topic(raw_topic: str) -> Optional[str]:
+    """Convert raw topic tags to standard topic names."""
+    raw_topic = raw_topic.strip()
+    for standard_topic, aliases in TOPIC_NORMALIZATION.items():
+        if raw_topic in aliases or raw_topic.lower() in [a.lower() for a in aliases]:
+            return standard_topic
+    return None
+
+def parse_leetcode_csv(csv_content: str) -> dict:
+    """Parse LeetCode CSV export and return topic counts."""
+    topic_counts = {}
+    difficulty_breakdown = {}
+    total_solved = 0
+    dates = []
+    
+    f = io.StringIO(csv_content)
+    reader = csv.DictReader(f)
+    
+    for row in reader:
+        # Only count accepted problems
+        if row.get("IsAccepted", "").lower() != "true":
+            continue
+        
+        total_solved += 1
+        
+        # Parse topic tags
+        tags = row.get("TopicTags", "").strip('[]"').split(",")
+        for tag in tags:
+            tag = tag.strip().strip('"')
+            normalized = normalize_topic(tag)
+            if normalized:
+                topic_counts[normalized] = topic_counts.get(normalized, 0) + 1
+                
+                # Difficulty tracking
+                if normalized not in difficulty_breakdown:
+                    difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
+                
+                difficulty = row.get("Difficulty", "").lower()
+                if difficulty in ["easy", "medium", "hard"]:
+                    difficulty_breakdown[normalized][difficulty] += 1
+    
+    # Calculate weekly pace from dates if available (placeholder)
+    weekly_pace = None
+    if dates:
+        days_span = (max(dates) - min(dates)).days + 1
+        weeks_span = days_span / 7
+        weekly_pace = total_solved / weeks_span if weeks_span > 0 else None
+    
+    return {
+        "source": "leetcode",
+        "topic_counts": topic_counts,
+        "difficulty_breakdown": difficulty_breakdown,
+        "total_solved": total_solved,
+        "weekly_pace": weekly_pace
+    }
+
+def parse_hackerrank_csv(csv_content: str) -> dict:
+    """Parse HackerRank CSV export and return topic counts."""
+    topic_counts = {}
+    difficulty_breakdown = {}
+    total_solved = 0
+    dates = []
+    
+    f = io.StringIO(csv_content)
+    reader = csv.DictReader(f)
+    
+    for row in reader:
+        # Only count solved problems
+        if row.get("Status", "").lower() != "solved":
+            continue
+        
+        total_solved += 1
+        
+        # Parse subdomain as topic
+        subdomain = row.get("Subdomain", "").strip()
+        normalized = normalize_topic(subdomain)
+        if normalized:
+            topic_counts[normalized] = topic_counts.get(normalized, 0) + 1
+            
+            # Difficulty tracking (HackerRank doesn't have explicit difficulty, default to medium)
+            if normalized not in difficulty_breakdown:
+                difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
+            difficulty_breakdown[normalized]["medium"] += 1
+        
+        # Extract date
+        try:
+            date_str = row.get("Solved On", "")
+            if date_str:
+                dates.append(dt.strptime(date_str, "%Y-%m-%d"))
+        except:
+            pass
+    
+    # Calculate weekly pace
+    weekly_pace = None
+    if dates:
+        days_span = (max(dates) - min(dates)).days + 1
+        weeks_span = days_span / 7
+        weekly_pace = total_solved / weeks_span if weeks_span > 0 else None
+    
+    return {
+        "source": "hackerrank",
+        "topic_counts": topic_counts,
+        "difficulty_breakdown": difficulty_breakdown,
+        "total_solved": total_solved,
+        "weekly_pace": weekly_pace
+    }
+
+def merge_profiles(*profiles) -> dict:
+    """Merge multiple parsed profiles (LeetCode, HackerRank, manual) into combined."""
+    merged_counts = {}
+    merged_difficulty = {}
+    total_solved = 0
+    paces = []
+    
+    for profile in profiles:
+        if not profile:
+            continue
+        
+        # Merge topic counts
+        for topic, count in profile.get("topic_counts", {}).items():
+            merged_counts[topic] = merged_counts.get(topic, 0) + count
+        
+        # Merge difficulty
+        for topic, difficulties in profile.get("difficulty_breakdown", {}).items():
+            if topic not in merged_difficulty:
+                merged_difficulty[topic] = {"easy": 0, "medium": 0, "hard": 0}
+            for diff_level, count in difficulties.items():
+                merged_difficulty[topic][diff_level] += count
+        
+        total_solved += profile.get("total_solved", 0)
+        if profile.get("weekly_pace"):
+            paces.append(profile["weekly_pace"])
+    
+    # Average weekly pace
+    weekly_pace = sum(paces) / len(paces) if paces else None
+    
+    return {
+        "source": "combined",
+        "topic_counts": merged_counts,
+        "difficulty_breakdown": merged_difficulty,
+        "total_solved": total_solved,
+        "weekly_pace": weekly_pace
+    }
+
+def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: dict) -> dict:
+    """Calculate coverage gaps for user against selected companies."""
+    critical_gaps = []
+    partial_gaps = []
+    covered_topics = []
+    
+    user_counts = user_profile.get("topic_counts", {})
+    all_company_needs = {}
+    
+    # Aggregate what all companies need
+    for company in companies:
+        if company not in company_patterns:
+            continue
+        company_data = company_patterns[company]
+        for topic, info in company_data.get("topics", {}).items():
+            if topic not in all_company_needs:
+                all_company_needs[topic] = {"companies": [], "expected": 0, "priority": info.get("priority", 10)}
+            all_company_needs[topic]["companies"].append(company)
+            all_company_needs[topic]["expected"] = max(all_company_needs[topic]["expected"], info.get("expected_problems", 10))
+    
+    # Calculate coverage for each topic
+    for topic, expected in all_company_needs.items():
+        user_solved = user_counts.get(topic, 0)
+        coverage = user_solved / expected["expected"] if expected["expected"] > 0 else 0
+        
+        # Estimate weeks to close gap (default 5 problems/week if no pace)
+        pace = user_profile.get("weekly_pace", 5)
+        gap = max(0, expected["expected"] - user_solved)
+        weeks_to_close = gap / pace if pace > 0 else None
+        
+        gap_obj = TopicGap(
+            topic=topic,
+            user_solved=user_solved,
+            company_expected=expected["expected"],
+            coverage_percent=round(coverage * 100, 1),
+            status="covered" if coverage >= 1.0 else "partial" if coverage >= 0.6 else "critical",
+            priority=len(expected["companies"]),  # Higher priority = more companies need it
+            companies_needing=expected["companies"],
+            weeks_to_close=weeks_to_close
+        )
+        
+        if gap_obj.status == "critical":
+            critical_gaps.append(gap_obj)
+        elif gap_obj.status == "partial":
+            partial_gaps.append(gap_obj)
+        else:
+            covered_topics.append(gap_obj)
+    
+    # Sort by priority
+    critical_gaps.sort(key=lambda x: (-len(x.companies_needing), x.topic))
+    partial_gaps.sort(key=lambda x: (-len(x.companies_needing), x.topic))
+    
+    return {
+        "critical_gaps": critical_gaps,
+        "partial_gaps": partial_gaps,
+        "covered_topics": covered_topics,
+        "summary": {
+            "total_topics_covered": len(covered_topics),
+            "total_partial": len(partial_gaps),
+            "total_critical": len(critical_gaps),
+            "total_topics_analyzed": len(all_company_needs)
+        }
+    }
+
+# Load company DSA patterns and resources
+try:
+    with open("company_dsa_patterns.json", "r") as f:
+        COMPANY_DSA_PATTERNS = json.load(f)
+except:
+    COMPANY_DSA_PATTERNS = {}
+
+try:
+    with open("dsa_resources.json", "r") as f:
+        DSA_RESOURCES = json.load(f)
+except:
+    DSA_RESOURCES = {}
+
+# API Endpoints for Coding Round Intel
+
+@app.post("/api/coding-intel/parse/leetcode")
+async def parse_leetcode(file: UploadFile = File(...), current_user = Depends(get_current_user)):
+    """Parse LeetCode CSV export and return parsed profile."""
+    try:
+        content = await file.read()
+        csv_content = content.decode("utf-8")
+        
+        profile = parse_leetcode_csv(csv_content)
+        return profile
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error parsing LeetCode CSV: {str(e)}")
+
+@app.post("/api/coding-intel/parse/hackerrank")
+async def parse_hackerrank(file: UploadFile = File(...), current_user = Depends(get_current_user)):
+    """Parse HackerRank CSV export and return parsed profile."""
+    try:
+        content = await file.read()
+        csv_content = content.decode("utf-8")
+        
+        profile = parse_hackerrank_csv(csv_content)
+        return profile
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error parsing HackerRank CSV: {str(e)}")
+
+@app.post("/api/coding-intel/manual")
+async def manual_entry(topics: dict, current_user = Depends(get_current_user)):
+    """Accept manual topic entry."""
+    return {
+        "source": "manual",
+        "topic_counts": topics,
+        "difficulty_breakdown": {t: {"easy": 0, "medium": count, "hard": 0} for t, count in topics.items()},
+        "total_solved": sum(topics.values()),
+        "weekly_pace": None
+    }
+
+@app.post("/api/coding-intel/profile")
+async def save_profile(
+    profile_data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Save combined coding profile to database."""
+    try:
+        user_id = current_user["sub"]
+        
+        # Determine source and merge if multiple
+        source = profile_data.get("source", "combined")
+        
+        # Create new profile record
+        profile = CodingProfileTable(
+            user_id=user_id,
+            source=source,
+            topic_counts=json.dumps(profile_data.get("topic_counts", {})),
+            difficulty_breakdown=json.dumps(profile_data.get("difficulty_breakdown", {})),
+            total_solved=profile_data.get("total_solved", 0),
+            weekly_pace=str(profile_data.get("weekly_pace")) if profile_data.get("weekly_pace") else None
+        )
+        
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+        
+        return {
+            "id": profile.id,
+            "source": profile.source,
+            "total_solved": profile.total_solved,
+            "created_at": profile.created_at.isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error saving profile: {str(e)}")
+
+@app.post("/api/coding-intel/analyze")
+async def analyze_gaps(
+    request: GapAnalysisRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Analyze coding gaps for selected companies."""
+    try:
+        user_id = current_user["sub"]
+        
+        # Get user's coding profile
+        if request.profile_id:
+            stmt = select(CodingProfileTable).where(
+                CodingProfileTable.id == request.profile_id,
+                CodingProfileTable.user_id == user_id
+            )
+        else:
+            # Get most recent profile
+            stmt = select(CodingProfileTable).where(
+                CodingProfileTable.user_id == user_id
+            ).order_by(desc(CodingProfileTable.created_at)).limit(1)
+        
+        result = await db.execute(stmt)
+        profile_record = result.scalar_one_or_none()
+        
+        if not profile_record:
+            raise HTTPException(status_code=404, detail="No coding profile found")
+        
+        # Reconstruct profile data
+        user_profile = {
+            "source": profile_record.source,
+            "topic_counts": json.loads(profile_record.topic_counts),
+            "difficulty_breakdown": json.loads(profile_record.difficulty_breakdown),
+            "total_solved": profile_record.total_solved,
+            "weekly_pace": float(profile_record.weekly_pace) if profile_record.weekly_pace else 5.0
+        }
+        
+        # Calculate gaps
+        gaps = calculate_gaps(user_profile, request.companies, COMPANY_DSA_PATTERNS)
+        
+        return gaps
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error analyzing gaps: {str(e)}")
+
+@app.post("/api/coding-intel/study-plan")
+async def generate_study_plan(
+    request: StudyPlanRequest,
+    current_user = Depends(get_current_user)
+):
+    """Generate a week-by-week study plan using Gemini."""
+    try:
+        if not genai_client:
+            raise HTTPException(status_code=503, detail="Gemini API not configured")
+        
+        # Format critical gaps for Gemini
+        gaps_text = "\n".join([
+            f"{i+1}. {gap.topic} — needs {gap.company_expected - gap.user_solved} more problems — affects {', '.join(gap.companies_needing)}"
+            for i, gap in enumerate(request.critical_gaps[:5])
+        ])
+        
+        prompt = f"""Student is preparing for {request.company} SWE Intern in {request.weeks_until_interview} weeks.
+Available: {request.hours_per_day} hours per day.
+
+Their critical gaps (sorted by priority):
+{gaps_text}
+
+Generate a specific week-by-week study plan:
+- Which topic to focus each week
+- 3 specific LeetCode problems by name and difficulty
+- One free resource (YouTube or article)
+- Daily time split
+
+Rules:
+- Be specific, not generic
+- Prioritize by cross-company frequency
+- Maximum 300 words"""
+        
+        response = await asyncio.to_thread(
+            lambda: genai_client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt
+            )
+        )
+        
+        return {
+            "study_plan": response.text,
+            "company": request.company,
+            "weeks": request.weeks_until_interview,
+            "hours_per_day": request.hours_per_day
+        }
+    except Exception as e:
+        # Fallback to generic plan
+        return {
+            "study_plan": "Study plan generation unavailable. Focus on your critical gaps in order.",
+            "company": request.company,
+            "weeks": request.weeks_until_interview,
+            "is_fallback": True
+        }
+
+@app.get("/api/coding-intel/profile")
+async def get_profile(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get user's most recent coding profile."""
+    try:
+        user_id = current_user["sub"]
+        
+        stmt = select(CodingProfileTable).where(
+            CodingProfileTable.user_id == user_id
+        ).order_by(desc(CodingProfileTable.created_at)).limit(1)
+        
+        result = await db.execute(stmt)
+        profile = result.scalar_one_or_none()
+        
+        if not profile:
+            return {"profile": None}
+        
+        return {
+            "profile": {
+                "id": profile.id,
+                "source": profile.source,
+                "topic_counts": json.loads(profile.topic_counts),
+                "difficulty_breakdown": json.loads(profile.difficulty_breakdown),
+                "total_solved": profile.total_solved,
+                "weekly_pace": float(profile.weekly_pace) if profile.weekly_pace else None,
+                "created_at": profile.created_at.isoformat()
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error fetching profile: {str(e)}")
+
+@app.get("/api/coding-intel/resources/{topic}")
+async def get_resources(topic: str, current_user = Depends(get_current_user)):
+    """Get study resources for a specific topic."""
+    if topic not in DSA_RESOURCES:
+        return {"error": f"Resources not found for {topic}"}
+    
+    return DSA_RESOURCES[topic]
+
+@app.get("/api/coding-intel/companies")
+async def get_companies(current_user = Depends(get_current_user)):
+    """Get list of all companies in DSA patterns database."""
+    return {"companies": list(COMPANY_DSA_PATTERNS.keys())}
 
 # uvicorn main:app --reload --port 8000

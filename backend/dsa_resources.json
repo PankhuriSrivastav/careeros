@@ -1,0 +1,524 @@
+{
+  "Arrays": {
+    "must_solve": [
+      {
+        "name": "Two Sum",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/two-sum",
+        "why": "Most common interview problem, introduces hash maps"
+      },
+      {
+        "name": "Best Time to Buy and Sell Stock",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock",
+        "why": "Teaches single-pass optimization"
+      },
+      {
+        "name": "Product of Array Except Self",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/product-of-array-except-self",
+        "why": "Google, Amazon favorite - prefix/suffix technique"
+      },
+      {
+        "name": "Trapping Rain Water",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/trapping-rain-water",
+        "why": "Classic two-pointer problem, Microsoft frequently asks"
+      }
+    ],
+    "youtube": {
+      "name": "NeetCode Arrays Playlist",
+      "url": "https://youtube.com/playlist?list=PLot-Xpze53ldVwtstag2TL4HQhAnC8ATf"
+    },
+    "article": {
+      "name": "GeeksforGeeks Array Problems",
+      "url": "https://www.geeksforgeeks.org/array-data-structure/"
+    }
+  },
+  "Strings": {
+    "must_solve": [
+      {
+        "name": "Valid Palindrome",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/valid-palindrome",
+        "why": "Two-pointer technique introduction"
+      },
+      {
+        "name": "Longest Substring Without Repeating Characters",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/longest-substring-without-repeating-characters",
+        "why": "Sliding window pattern - asked everywhere"
+      },
+      {
+        "name": "Group Anagrams",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/group-anagrams",
+        "why": "Hash map mastery - Amazon, Google"
+      },
+      {
+        "name": "Minimum Window Substring",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/minimum-window-substring",
+        "why": "Advanced sliding window - Google, Meta"
+      }
+    ],
+    "youtube": {
+      "name": "NeetCode Strings Playlist",
+      "url": "https://youtube.com/playlist?list=PLot-Xpze53lcvx_fi-_uS5LMEVNmCKNqw"
+    },
+    "article": {
+      "name": "String Manipulation Techniques",
+      "url": "https://www.geeksforgeeks.org/string-data-structure/"
+    }
+  },
+  "Linked Lists": {
+    "must_solve": [
+      {
+        "name": "Reverse Linked List",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/reverse-linked-list",
+        "why": "Fundamental linked list operation"
+      },
+      {
+        "name": "Merge Two Sorted Lists",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/merge-two-sorted-lists",
+        "why": "Common interview pattern"
+      },
+      {
+        "name": "Linked List Cycle",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/linked-list-cycle",
+        "why": "Floyd's cycle detection - classic"
+      },
+      {
+        "name": "LRU Cache",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/lru-cache",
+        "why": "Linked list + hash map combo - Google, Amazon"
+      }
+    ],
+    "youtube": {
+      "name": "NeetCode Linked Lists Playlist",
+      "url": "https://youtube.com/playlist?list=PLot-Xpze53lf5C-LXBEQXh50pk2_VjwI7"
+    },
+    "article": {
+      "name": "Linked List Operations",
+      "url": "https://www.geeksforgeeks.org/linked-list-data-structure/"
+    }
+  },
+  "Trees": {
+    "must_solve": [
+      {
+        "name": "Inorder Traversal",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/binary-tree-inorder-traversal",
+        "why": "Foundation - all tree problems start here"
+      },
+      {
+        "name": "Level Order Traversal",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/binary-tree-level-order-traversal",
+        "why": "BFS on trees - Apple, Google"
+      },
+      {
+        "name": "Lowest Common Ancestor",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree",
+        "why": "Core tree problem - Amazon frequently asks"
+      },
+      {
+        "name": "Binary Tree Maximum Path Sum",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/binary-tree-maximum-path-sum",
+        "why": "Hard tree problem - Meta, Google"
+      }
+    ],
+    "youtube": {
+      "name": "NeetCode Trees Playlist",
+      "url": "https://youtube.com/playlist?list=PLot-Xpze53ldg4pN6K0vqnrEnxeJ9VAil"
+    },
+    "article": {
+      "name": "Binary Tree Concepts",
+      "url": "https://www.geeksforgeeks.org/binary-tree-data-structure/"
+    }
+  },
+  "Graphs": {
+    "must_solve": [
+      {
+        "name": "Number of Islands",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/number-of-islands",
+        "why": "DFS/BFS intro - Google, Amazon"
+      },
+      {
+        "name": "Clone Graph",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/clone-graph",
+        "why": "Graph traversal + cloning - Meta"
+      },
+      {
+        "name": "Course Schedule",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/course-schedule",
+        "why": "Topological sort - Google, Amazon"
+      },
+      {
+        "name": "Network Delay Time",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/network-delay-time",
+        "why": "Dijkstra's algorithm - Microsoft, Google"
+      }
+    ],
+    "youtube": {
+      "name": "NeetCode Graphs Playlist",
+      "url": "https://youtube.com/playlist?list=PLot-Xpze53lf5C-LXBEQXh50pk2_VjwI8"
+    },
+    "article": {
+      "name": "Graph Algorithms",
+      "url": "https://www.geeksforgeeks.org/graph-data-structure-and-algorithms/"
+    }
+  },
+  "Dynamic Programming": {
+    "must_solve": [
+      {
+        "name": "Climbing Stairs",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/climbing-stairs",
+        "why": "Classic intro to DP"
+      },
+      {
+        "name": "Coin Change",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/coin-change",
+        "why": "Google favorite - foundational DP"
+      },
+      {
+        "name": "Longest Increasing Subsequence",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/longest-increasing-subsequence",
+        "why": "Classic DP pattern - Amazon, Microsoft"
+      },
+      {
+        "name": "Palindromic Substrings",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/palindromic-substrings",
+        "why": "2D DP pattern - Meta, Google"
+      }
+    ],
+    "youtube": {
+      "name": "NeetCode DP Playlist",
+      "url": "https://youtube.com/playlist?list=PLot-Xpze53leF0FeKDqVaIGEwod_2V55Fb"
+    },
+    "article": {
+      "name": "Dynamic Programming Demystified",
+      "url": "https://www.geeksforgeeks.org/dynamic-programming/"
+    }
+  },
+  "Binary Search": {
+    "must_solve": [
+      {
+        "name": "Binary Search",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/binary-search",
+        "why": "Foundation - template for all binary search"
+      },
+      {
+        "name": "Search in Rotated Sorted Array",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/search-in-rotated-sorted-array",
+        "why": "Classic variant - Google, Microsoft"
+      },
+      {
+        "name": "Find First and Last Position",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/find-first-and-last-position-of-element-in-sorted-array",
+        "why": "Binary search variants - Amazon"
+      },
+      {
+        "name": "Median of Two Sorted Arrays",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/median-of-two-sorted-arrays",
+        "why": "Advanced binary search - Google, Meta"
+      }
+    ],
+    "youtube": {
+      "name": "Binary Search Patterns",
+      "url": "https://youtube.com/results?search_query=binary+search+patterns"
+    },
+    "article": {
+      "name": "Binary Search Tutorial",
+      "url": "https://www.geeksforgeeks.org/binary-search/"
+    }
+  },
+  "Sorting": {
+    "must_solve": [
+      {
+        "name": "Merge Intervals",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/merge-intervals",
+        "why": "Sort + greedy - Google, Amazon"
+      },
+      {
+        "name": "Top K Frequent Elements",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/top-k-frequent-elements",
+        "why": "Sorting + heap - Amazon, Microsoft"
+      },
+      {
+        "name": "Kth Largest Element",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/kth-largest-element-in-an-array",
+        "why": "Quicksort partition pattern"
+      }
+    ],
+    "youtube": {
+      "name": "Sorting Algorithms",
+      "url": "https://youtube.com/results?search_query=sorting+algorithms+tutorial"
+    },
+    "article": {
+      "name": "Sorting Fundamentals",
+      "url": "https://www.geeksforgeeks.org/sorting-algorithms/"
+    }
+  },
+  "Hashmaps": {
+    "must_solve": [
+      {
+        "name": "Valid Anagram",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/valid-anagram",
+        "why": "Hash map basics"
+      },
+      {
+        "name": "Contains Duplicate",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/contains-duplicate",
+        "why": "Set usage - foundation"
+      },
+      {
+        "name": "Two Sum",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/two-sum",
+        "why": "Hash map lookup pattern"
+      },
+      {
+        "name": "Majority Element II",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/majority-element-ii",
+        "why": "Advanced hash map - Microsoft, Google"
+      }
+    ],
+    "youtube": {
+      "name": "Hash Maps and Hash Sets",
+      "url": "https://youtube.com/results?search_query=hash+map+tutorial"
+    },
+    "article": {
+      "name": "Hash Tables Guide",
+      "url": "https://www.geeksforgeeks.org/hashing-set-1-introduction/"
+    }
+  },
+  "Stack/Queue": {
+    "must_solve": [
+      {
+        "name": "Valid Parentheses",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/valid-parentheses",
+        "why": "Stack fundamentals"
+      },
+      {
+        "name": "Min Stack",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/min-stack",
+        "why": "Stack design - Google, Amazon"
+      },
+      {
+        "name": "Daily Temperatures",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/daily-temperatures",
+        "why": "Monotonic stack - Meta, Amazon"
+      },
+      {
+        "name": "Trapping Rain Water",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/trapping-rain-water",
+        "why": "Stack application - Google"
+      }
+    ],
+    "youtube": {
+      "name": "Stack & Queue Concepts",
+      "url": "https://youtube.com/results?search_query=stack+queue+tutorial"
+    },
+    "article": {
+      "name": "Stack and Queue",
+      "url": "https://www.geeksforgeeks.org/stack-data-structure/"
+    }
+  },
+  "Heaps": {
+    "must_solve": [
+      {
+        "name": "Kth Largest Element in Array",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/kth-largest-element-in-an-array",
+        "why": "Heap fundamentals"
+      },
+      {
+        "name": "Top K Frequent Elements",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/top-k-frequent-elements",
+        "why": "Heap + hash map - Amazon, Google"
+      },
+      {
+        "name": "Merge K Sorted Lists",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/merge-k-sorted-lists",
+        "why": "Min heap pattern - Google, Microsoft"
+      },
+      {
+        "name": "Find Median from Data Stream",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/find-median-from-data-stream",
+        "why": "Two heaps pattern - Amazon, Meta"
+      }
+    ],
+    "youtube": {
+      "name": "Heaps and Priority Queues",
+      "url": "https://youtube.com/results?search_query=heap+priority+queue+tutorial"
+    },
+    "article": {
+      "name": "Heap Data Structure",
+      "url": "https://www.geeksforgeeks.org/binary-heap/"
+    }
+  },
+  "Tries": {
+    "must_solve": [
+      {
+        "name": "Implement Trie",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/implement-trie-prefix-tree",
+        "why": "Trie fundamentals"
+      },
+      {
+        "name": "Search Suggestions System",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/search-suggestions-system",
+        "why": "Trie application - Amazon"
+      },
+      {
+        "name": "Word Search II",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/word-search-ii",
+        "why": "Trie + backtracking - Google"
+      }
+    ],
+    "youtube": {
+      "name": "Trie Data Structure",
+      "url": "https://youtube.com/results?search_query=trie+prefix+tree+tutorial"
+    },
+    "article": {
+      "name": "Trie Implementation",
+      "url": "https://www.geeksforgeeks.org/trie-insert-and-search/"
+    }
+  },
+  "Recursion": {
+    "must_solve": [
+      {
+        "name": "Permutations",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/permutations",
+        "why": "Backtracking foundation"
+      },
+      {
+        "name": "Combinations",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/combinations",
+        "why": "Backtracking pattern"
+      },
+      {
+        "name": "N-Queens",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/n-queens",
+        "why": "Advanced backtracking - Google, Meta"
+      },
+      {
+        "name": "Word Ladder",
+        "difficulty": "Hard",
+        "url": "https://leetcode.com/problems/word-ladder",
+        "why": "BFS + recursion - Amazon"
+      }
+    ],
+    "youtube": {
+      "name": "Recursion and Backtracking",
+      "url": "https://youtube.com/results?search_query=recursion+backtracking+tutorial"
+    },
+    "article": {
+      "name": "Backtracking Algorithm",
+      "url": "https://www.geeksforgeeks.org/backtracking-algorithms/"
+    }
+  },
+  "Greedy": {
+    "must_solve": [
+      {
+        "name": "Jump Game",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/jump-game",
+        "why": "Greedy fundamentals"
+      },
+      {
+        "name": "Gas Station",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/gas-station",
+        "why": "Greedy logic - Amazon"
+      },
+      {
+        "name": "Interval Scheduling Maximization",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/minimum-number-of-meeting-rooms",
+        "why": "Greedy scheduling"
+      }
+    ],
+    "youtube": {
+      "name": "Greedy Algorithms",
+      "url": "https://youtube.com/results?search_query=greedy+algorithm+tutorial"
+    },
+    "article": {
+      "name": "Greedy Algorithm",
+      "url": "https://www.geeksforgeeks.org/greedy-algorithms/"
+    }
+  },
+  "Math/Bit Manipulation": {
+    "must_solve": [
+      {
+        "name": "Single Number",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/single-number",
+        "why": "Bit manipulation basics - XOR"
+      },
+      {
+        "name": "Counting Bits",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/counting-bits",
+        "why": "Bit DP pattern"
+      },
+      {
+        "name": "Reverse Bits",
+        "difficulty": "Easy",
+        "url": "https://leetcode.com/problems/reverse-bits",
+        "why": "Bit manipulation practice"
+      },
+      {
+        "name": "Maximum XOR of Two Numbers in Array",
+        "difficulty": "Medium",
+        "url": "https://leetcode.com/problems/maximum-xor-of-two-numbers-in-an-array",
+        "why": "Advanced bit manipulation - Google"
+      }
+    ],
+    "youtube": {
+      "name": "Bit Manipulation Tricks",
+      "url": "https://youtube.com/results?search_query=bit+manipulation+tutorial"
+    },
+    "article": {
+      "name": "Bit Manipulation Guide",
+      "url": "https://www.geeksforgeeks.org/bitwise-operators-in-c/"
+    }
+  }
+}

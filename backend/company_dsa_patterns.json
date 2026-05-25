@@ -1,0 +1,808 @@
+{
+  "Google": {
+    "role": "SWE Intern",
+    "topics": {
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 20,
+        "difficulty": "medium-hard",
+        "priority": 1
+      },
+      "Graphs": {
+        "frequency": "high",
+        "expected_problems": 15,
+        "difficulty": "medium-hard",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "high",
+        "expected_problems": 15,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Arrays": {
+        "frequency": "medium",
+        "expected_problems": 20,
+        "difficulty": "easy-medium",
+        "priority": 4
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 5
+      },
+      "Binary Search": {
+        "frequency": "medium",
+        "expected_problems": 8,
+        "difficulty": "easy-medium",
+        "priority": 6
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Microsoft": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 20,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "high",
+        "expected_problems": 15,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "high",
+        "expected_problems": 15,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "medium-hard",
+        "priority": 4
+      },
+      "Linked Lists": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "easy-medium",
+        "priority": 5
+      },
+      "Hashmaps": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "easy-medium",
+        "priority": 6
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Amazon": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 22,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Trees": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 4
+      },
+      "Graphs": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 5
+      },
+      "Hashmaps": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "easy-medium",
+        "priority": 6
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Apple": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Trees": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium-hard",
+        "priority": 4
+      },
+      "Binary Search": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "easy-medium",
+        "priority": 5
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Meta": {
+    "role": "SWE Intern",
+    "topics": {
+      "Graphs": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "medium-hard",
+        "priority": 1
+      },
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "medium-hard",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Arrays": {
+        "frequency": "medium",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 4
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 5
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Flipkart": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 20,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 4
+      },
+      "Graphs": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 5
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Swiggy": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Graphs": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 4
+      },
+      "Hashmaps": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "easy-medium",
+        "priority": 5
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Zomato": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Graphs": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 4
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 5
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Razorpay": {
+    "role": "SWE Intern",
+    "topics": {
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 2
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "CRED": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Hashmaps": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "easy-medium",
+        "priority": 3
+      },
+      "Binary Search": {
+        "frequency": "medium",
+        "expected_problems": 8,
+        "difficulty": "easy-medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Zepto": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Graphs": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "PhonePe": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Groww": {
+    "role": "SWE Intern",
+    "topics": {
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "easy-medium",
+        "priority": 2
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Meesho": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Paytm": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Hashmaps": {
+        "frequency": "medium",
+        "expected_problems": 8,
+        "difficulty": "easy-medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Ola": {
+    "role": "SWE Intern",
+    "topics": {
+      "Graphs": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Adobe": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Cisco": {
+    "role": "SWE Intern",
+    "topics": {
+      "Graphs": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "easy-medium",
+        "priority": 2
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Synopsys": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "high",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Qualcomm": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Graphs": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Samsung": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Intuit": {
+    "role": "SWE Intern",
+    "topics": {
+      "Dynamic Programming": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 14,
+        "difficulty": "easy-medium",
+        "priority": 2
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Oracle": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "SQL": {
+        "frequency": "high",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "SAP": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Atlassian": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 16,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Graphs": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  },
+  "Walmart Global Tech": {
+    "role": "SWE Intern",
+    "topics": {
+      "Arrays": {
+        "frequency": "high",
+        "expected_problems": 18,
+        "difficulty": "easy-medium",
+        "priority": 1
+      },
+      "Strings": {
+        "frequency": "medium",
+        "expected_problems": 12,
+        "difficulty": "medium",
+        "priority": 2
+      },
+      "Trees": {
+        "frequency": "medium",
+        "expected_problems": 10,
+        "difficulty": "medium",
+        "priority": 3
+      },
+      "Dynamic Programming": {
+        "frequency": "medium",
+        "expected_problems": 8,
+        "difficulty": "medium",
+        "priority": 4
+      }
+    },
+    "source": "community",
+    "last_updated": "2026-05"
+  }
+}

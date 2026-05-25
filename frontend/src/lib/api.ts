@@ -206,6 +206,68 @@ export const apiService = {
     const response = await api.get('/api/referral/history');
     return response.data;
   },
+
+  // Coding Round Intel
+  async parseLeetCodeCSV(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/api/coding-intel/parse/leetcode', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  async parseHackerRankCSV(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/api/coding-intel/parse/hackerrank', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  async submitManualCodingProfile(topics: Record<string, number>) {
+    const response = await api.post('/api/coding-intel/manual', topics);
+    return response.data;
+  },
+
+  async saveCodingProfile(profileData: any) {
+    const response = await api.post('/api/coding-intel/profile', profileData);
+    return response.data;
+  },
+
+  async getCodingProfile() {
+    const response = await api.get('/api/coding-intel/profile');
+    return response.data;
+  },
+
+  async analyzeCodingGaps(companies: string[], profileId?: number) {
+    const response = await api.post('/api/coding-intel/analyze', {
+      companies,
+      profile_id: profileId,
+    });
+    return response.data;
+  },
+
+  async generateStudyPlan(company: string, weeksUntilInterview: number, hoursPerDay: number, criticalGaps: any[]) {
+    const response = await api.post('/api/coding-intel/study-plan', {
+      company,
+      weeks_until_interview: weeksUntilInterview,
+      hours_per_day: hoursPerDay,
+      critical_gaps: criticalGaps,
+    });
+    return response.data;
+  },
+
+  async getTopicResources(topic: string) {
+    const response = await api.get(`/api/coding-intel/resources/${topic}`);
+    return response.data;
+  },
+
+  async getCodingIntelCompanies() {
+    const response = await api.get('/api/coding-intel/companies');
+    return response.data;
+  },
 };
 
 // Convenience exports for direct usage
@@ -226,3 +288,12 @@ export const draftMessage = apiService.draftMessage;
 export const trackReferral = apiService.trackReferral;
 export const updateReferralStatus = apiService.updateReferralStatus;
 export const getReferralHistory = apiService.getReferralHistory;
+export const parseLeetCodeCSV = apiService.parseLeetCodeCSV;
+export const parseHackerRankCSV = apiService.parseHackerRankCSV;
+export const submitManualCodingProfile = apiService.submitManualCodingProfile;
+export const saveCodingProfile = apiService.saveCodingProfile;
+export const getCodingProfile = apiService.getCodingProfile;
+export const analyzeCodingGaps = apiService.analyzeCodingGaps;
+export const generateStudyPlan = apiService.generateStudyPlan;
+export const getTopicResources = apiService.getTopicResources;
+export const getCodingIntelCompanies = apiService.getCodingIntelCompanies;

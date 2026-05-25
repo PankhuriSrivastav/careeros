@@ -8,6 +8,7 @@ import ApplicationsTab from '@/components/dashboard/ApplicationsTab';
 import ResumeAnalyzerTab from '@/components/dashboard/ResumeAnalyzerTab';
 import JobMatcherTab from '@/components/dashboard/JobMatcherTab';
 import TailorKitContent from '@/components/tailorkit/TailorKitContent';
+import CodingIntelTab from '@/components/dashboard/CodingIntelTab';
 import AnalyticsPage from './analytics/page';
 import SkillGapAnalyzerPage from './skill-gap/page';
 import OpportunitiesPage from './opportunities/page';
@@ -25,7 +26,7 @@ export interface ResumeVersion {
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<
-    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit'
+    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel'
   >('applications');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
@@ -124,6 +125,7 @@ export default function DashboardPage() {
             {activeTab === 'skill-gap' && 'Skill Gap Analyzer'}
             {activeTab === 'opportunities' && 'Opportunity Finder'}
             {activeTab === 'tailorkit' && 'TailorKit'}
+            {activeTab === 'coding-intel' && 'Coding Round Intel'}
           </h1>
           <div className="flex items-center space-x-3">
             <a
@@ -173,6 +175,9 @@ export default function DashboardPage() {
                 onVersionsUpdated={setResumeVersions}
               />
             </div>
+          )}
+          {activeTab === 'coding-intel' && (
+            <CodingIntelTab />
           )}
         </div>
       </div>
