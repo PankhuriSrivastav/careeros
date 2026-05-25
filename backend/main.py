@@ -1944,40 +1944,66 @@ def _fallback_message_template(
 
 def _rank_profiles(profiles: List[dict], user_college: str) -> List[dict]:
     """
-    Rank profiles by college match and YoE.
-    Tier 1: VIT alumni (if user is VIT), grad 2020-2024
-    Tier 2: Other tier-2 college alumni, grad 2019-2022
-    Tier 3: Any Indian engineer
+    Multi-signal ranking — scores each profile on 5 dimensions.
+    Higher score = shown first.
     """
-    tier_2_colleges = {"NIT", "BITS", "Manipal", "SRM", "IIIT"}
     current_year = datetime.utcnow().year
-    
+    tier_2_colleges = {"NIT", "BITS", "MANIPAL", "SRM", "IIIT", "DTU", "NSIT"}
+
     for profile in profiles:
-        tier = 3  # Default tier
-        college = profile.get("college", "").upper()
-        yoe = profile.get("yoe", 0)
-        
-        # Tier 1: VIT alumni if user is VIT
-        if "VIT" in user_college.upper() and "VIT" in college:
-            if 2020 <= (current_year - yoe) <= 2024:
-                tier = 1
-        
-        # Tier 2: Other tier-2 college alumni
-        if tier == 3:
-            if any(tc in college for tc in tier_2_colleges):
-                if 2019 <= (current_year - yoe) <= 2022:
-                    tier = 2
-        
-        profile["tier"] = tier
-    
-    # Sort by tier (ascending, so tier 1 first), then by YoE (prefer 1-4 years)
-    def sort_key(p):
-        tier = p.get("tier", 3)
-        yoe = p.get("yoe", 999)
-        yoe_distance = abs(yoe - 2)  # Prefer 2 years of experience
-        return (tier, yoe_distance)
-    
-    profiles.sort(key=sort_key)
+        score = 0
+        college = (profile.get("college") or "").upper()
+        yoe = profile.get("yoe") or 0
+        snippet = (profile.get("snippet") or "").lower()
+        name = (profile.get("name") or "").lower()
+        url = (profile.get("url") or "").lower()
+
+        # Signal 1 — Same college (highest weight)
+        if user_college.upper() in college and college:
+            score += 50
+
+        # Signal 2 — Tier 2 college match
+        elif any(tc in college for tc in tier_2_colleges):
+            score += 20
+
+        # Signal 3 — YoE sweet spot (1-4 years)
+        if 1 <= yoe <= 4:
+            score += 30
+        elif 5 <= yoe <= 7:
+            score += 15
+        elif yoe > 7:
+            score += 5
+
+        # Signal 4 — Currently at company (not "former" or "ex")
+        if "former" not in snippet and "ex-" not in snippet and "previously" not in snippet:
+            score += 20
+        else:
+            score -= 30  # Penalize likely stale profiles heavily
+
+        # Signal 5 — Role relevance
+        role_keywords = ["engineer", "developer", "sde", "swe", "software", "tech"]
+        if any(kw in snippet for kw in role_keywords):
+            score += 10
+
+        # Signal 6 — Indian name signal (common Indian name patterns)
+        indian_suffixes = ["kumar", "sharma", "singh", "gupta", "patel", "jain",
+                          "agarwal", "mishra", "verma", "yadav", "reddy", "nair",
+                          "iyer", "pillai", "menon", "rao", "bhat", "joshi"]
+        if any(suffix in name for suffix in indian_suffixes):
+            score += 10
+
+        # Signal 7 — Profile URL quality (individual profile vs search page)
+        if "/in/" in url:
+            score += 15  # Direct profile link
+        elif "search" in url:
+            score -= 20  # Search page, not useful
+
+        profile["score"] = score
+        # Keep tier for backwards compatibility
+        profile["tier"] = 1 if score >= 80 else 2 if score >= 40 else 3
+
+    # Sort by score descending
+    profiles.sort(key=lambda p: p.get("score", 0), reverse=True)
     return profiles
 
 def _parse_profile_from_ddg(result: dict, user_college: str) -> Optional[dict]:
@@ -1990,6 +2016,10 @@ def _parse_profile_from_ddg(result: dict, user_college: str) -> Optional[dict]:
     url = result.get("url", "")
     
     if not url or "linkedin" not in url.lower():
+        return None
+
+    # Filter out LinkedIn search pages — only want individual profiles
+    if "/search/" in url or "searchResults" in url:
         return None
     
     # Extract name from title (usually first 1-3 words)
@@ -2059,11 +2089,12 @@ async def search_professionals(
         if vit_match:
             user_college = "VIT"
     
-    # Build 3-4 search queries targeting LinkedIn profiles (no site: to avoid blocking)
+    # Build 3-4 search queries targeting LinkedIn profiles (individual profiles, not search pages)
     queries = [
-        f'linkedin "{company}" "{role}" India profile',
-        f'linkedin.com/in "{company}" engineer India',
-        f'"{company}" "{role}" India linkedin profile',
+        f'linkedin.com/in "{company}" "software engineer" India',
+        f'linkedin.com/in "{company}" "developer" India',
+        f'"{company}" engineer India linkedin profile -search',
+        f'linkedin "{company}" "{role}" India site:linkedin.com/in',
     ]
     
     # Run searches in parallel
