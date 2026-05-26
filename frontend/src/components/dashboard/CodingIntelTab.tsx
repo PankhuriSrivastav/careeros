@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://careeros-backend-asbs.onrender.com';
+
+const getAuthHeaders = () => ({
+  'Authorization': `Bearer ${localStorage.getItem('token')}`
+});
+
 interface UserProfile {
   topic_counts: { [key: string]: number };
   total_solved: number;
@@ -67,27 +73,23 @@ const CodingIntelContent = () => {
   useEffect(() => {
     const fetchCompanies = async () => {
       try {
-        const response = await axios.get('/api/coding-intel/companies', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+        const response = await axios.get(`${API_URL}/api/coding-intel/companies`, {
+          headers: getAuthHeaders()
         });
         setCompanies(response.data.companies);
       } catch (error) {
         console.error('Error fetching companies:', error);
       }
     };
-    
+
     fetchCompanies();
     loadSavedProfile();
   }, []);
 
   const loadSavedProfile = async () => {
     try {
-      const response = await axios.get('/api/coding-intel/profile', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      const response = await axios.get(`${API_URL}/api/coding-intel/profile`, {
+        headers: getAuthHeaders()
       });
       if (response.data.profile) {
         setUserProfile(response.data.profile);
@@ -105,18 +107,14 @@ const CodingIntelContent = () => {
 
     setLeetcodeFetching(true);
     try {
-      const response = await axios.get('/api/coding-intel/parse/leetcode', {
+      const response = await axios.get(`${API_URL}/api/coding-intel/parse/leetcode`, {
         params: { username: leetcodeUsername.trim() },
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: getAuthHeaders()
       });
 
       // Save profile
-      await axios.post('/api/coding-intel/profile', response.data, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      await axios.post(`${API_URL}/api/coding-intel/profile`, response.data, {
+        headers: getAuthHeaders()
       });
 
       setUserProfile(response.data);
@@ -142,20 +140,18 @@ const CodingIntelContent = () => {
       formData.append('file', file);
 
       // Only HackerRank uses file upload now
-      let endpoint = '/api/coding-intel/parse/hackerrank';
+      let endpoint = `${API_URL}/api/coding-intel/parse/hackerrank`;
 
       const response = await axios.post(endpoint, formData, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          ...getAuthHeaders(),
           'Content-Type': 'multipart/form-data'
         }
       });
 
       // Save profile
-      await axios.post('/api/coding-intel/profile', response.data, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      await axios.post(`${API_URL}/api/coding-intel/profile`, response.data, {
+        headers: getAuthHeaders()
       });
 
       setUserProfile(response.data);
@@ -190,16 +186,12 @@ const CodingIntelContent = () => {
   };
 
   const handleManualSubmit = async () => {
-    const response = await axios.post('/api/coding-intel/manual', manualTopics, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
+    const response = await axios.post(`${API_URL}/api/coding-intel/manual`, manualTopics, {
+      headers: getAuthHeaders()
     });
 
-    const saveResponse = await axios.post('/api/coding-intel/profile', response.data, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
+    const saveResponse = await axios.post(`${API_URL}/api/coding-intel/profile`, response.data, {
+      headers: getAuthHeaders()
     });
 
     setUserProfile(response.data);
@@ -214,12 +206,10 @@ const CodingIntelContent = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post('/api/coding-intel/analyze', {
+      const response = await axios.post(`${API_URL}/api/coding-intel/analyze`, {
         companies: selectedCompanies
       }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: getAuthHeaders()
       });
 
       setGapAnalysis(response.data);

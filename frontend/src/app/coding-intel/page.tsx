@@ -209,12 +209,10 @@ const CodingIntelPage = () => {
 
     setLoading(true);
     try {
-      const response = await axios.post('/api/coding-intel/analyze', {
+      const response = await axios.post(`${API_URL}/api/coding-intel/analyze`, {
         companies: selectedCompanies
       }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: getAuthHeaders()
       });
 
       setGapAnalysis(response.data);
