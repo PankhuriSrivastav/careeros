@@ -3,13 +3,45 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
+interface UserProfile {
+  topic_counts: { [key: string]: number };
+  total_solved: number;
+  weekly_pace?: number;
+  difficulty_breakdown?: { [key: string]: { easy: number; medium: number; hard: number } };
+}
+
+interface GapAnalysis {
+  critical_gaps: Array<{
+    topic: string;
+    user_solved: number;
+    company_expected: number;
+    coverage_percent: number;
+    priority: number;
+    companies_needing: string[];
+    weeks_to_close?: number;
+  }>;
+  partial_gaps: Array<{
+    topic: string;
+    user_solved: number;
+    company_expected: number;
+    coverage_percent: number;
+    companies_needing: string[];
+    weeks_to_close?: number;
+  }>;
+  covered_topics: Array<{
+    topic: string;
+    user_solved: number;
+    company_expected: number;
+  }>;
+}
+
 const CodingIntelContent = () => {
   const [activeTab, setActiveTab] = useState<'leetcode' | 'hackerrank' | 'manual'>('leetcode');
   const [loading, setLoading] = useState(false);
-  const [userProfile, setUserProfile] = useState(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [companies, setCompanies] = useState<string[]>([]);
-  const [gapAnalysis, setGapAnalysis] = useState(null);
+  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis | null>(null);
   const [manualTopics, setManualTopics] = useState<{[key: string]: number}>({
     'Dynamic Programming': 0,
     'Trees': 0,
