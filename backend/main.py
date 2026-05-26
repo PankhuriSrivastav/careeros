@@ -2427,53 +2427,143 @@ def normalize_topic(raw_topic: str) -> Optional[str]:
             return standard_topic
     return None
 
-def parse_leetcode_csv(csv_content: str) -> dict:
-    """Parse LeetCode CSV export and return topic counts."""
-    topic_counts = {}
-    difficulty_breakdown = {}
-    total_solved = 0
-    dates = []
-    
-    f = io.StringIO(csv_content)
-    reader = csv.DictReader(f)
-    
-    for row in reader:
-        # Only count accepted problems
-        if row.get("IsAccepted", "").lower() != "true":
-            continue
-        
-        total_solved += 1
-        
-        # Parse topic tags
-        tags = row.get("TopicTags", "").strip('[]"').split(",")
-        for tag in tags:
-            tag = tag.strip().strip('"')
-            normalized = normalize_topic(tag)
-            if normalized:
-                topic_counts[normalized] = topic_counts.get(normalized, 0) + 1
-                
-                # Difficulty tracking
-                if normalized not in difficulty_breakdown:
-                    difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
-                
-                difficulty = row.get("Difficulty", "").lower()
-                if difficulty in ["easy", "medium", "hard"]:
-                    difficulty_breakdown[normalized][difficulty] += 1
-    
-    # Calculate weekly pace from dates if available (placeholder)
-    weekly_pace = None
-    if dates:
-        days_span = (max(dates) - min(dates)).days + 1
-        weeks_span = days_span / 7
-        weekly_pace = total_solved / weeks_span if weeks_span > 0 else None
-    
-    return {
-        "source": "leetcode",
-        "topic_counts": topic_counts,
-        "difficulty_breakdown": difficulty_breakdown,
-        "total_solved": total_solved,
-        "weekly_pace": weekly_pace
-    }
+async def fetch_leetcode_profile(username: str) -> dict:
+    """Fetch LeetCode profile from API wrapper. Returns topic counts and stats."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Try the wrapper API first
+            skills_url = f"https://leetcode-api-pied.vercel.app/user/{username}/skills"
+            skills_response = await client.get(skills_url)
+
+            if skills_response.status_code != 200:
+                raise Exception(f"Skills API failed: {skills_response.status_code}")
+
+            skills_data = skills_response.json()
+
+            # Also fetch basic stats for pace calculation
+            stats_url = f"https://leetcode-api-pied.vercel.app/user/{username}"
+            stats_response = await client.get(stats_url)
+            stats_data = stats_response.json() if stats_response.status_code == 200 else {}
+
+            # Parse skills into normalized topic counts
+            topic_counts = {}
+            difficulty_breakdown = {}
+
+            if "skills" in skills_data:
+                for skill in skills_data["skills"]:
+                    skill_name = skill.get("name", "")
+                    count = skill.get("problems", 0)
+
+                    normalized = normalize_topic(skill_name)
+                    if normalized:
+                        topic_counts[normalized] = topic_counts.get(normalized, 0) + count
+
+                        # Initialize difficulty breakdown
+                        if normalized not in difficulty_breakdown:
+                            difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
+
+            # Calculate total solved and weekly pace
+            total_solved = sum(topic_counts.values())
+
+            # Estimate weekly pace: total_solved / weeks_active
+            weekly_pace = None
+            if "joinDate" in stats_data:
+                try:
+                    join_date = datetime.fromisoformat(stats_data["joinDate"].replace('Z', '+00:00'))
+                    days_active = (datetime.now(join_date.tzinfo) - join_date).days
+                    weeks_active = max(days_active / 7, 1)
+                    weekly_pace = round(total_solved / weeks_active, 2)
+                except:
+                    pass
+
+            return {
+                "source": "leetcode",
+                "topic_counts": topic_counts,
+                "difficulty_breakdown": difficulty_breakdown,
+                "total_solved": total_solved,
+                "weekly_pace": weekly_pace
+            }
+    except Exception as e:
+        raise Exception(f"Failed to fetch LeetCode profile: {str(e)}")
+
+async def fetch_leetcode_profile_fallback(username: str) -> dict:
+    """Fallback: Fetch from LeetCode GraphQL directly."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            query = """
+            query GetUserProfile($username: String!) {
+                matchedUser(username: $username) {
+                    username
+                    profile {
+                        userAvatar
+                        realName
+                    }
+                    languageProblemCount {
+                        languageName
+                        problemsSolved
+                    }
+                    problemsSolvedBeatsStats {
+                        difficulty
+                        percentage
+                    }
+                    userCalendar(year: 2024) {
+                        activeYears
+                    }
+                    submitStats {
+                        acSubmissionNum {
+                            difficulty
+                            count
+                            submissions
+                        }
+                    }
+                }
+            }
+            """
+
+            response = await client.post(
+                "https://leetcode.com/graphql",
+                json={"query": query, "variables": {"username": username}},
+                headers={"Content-Type": "application/json"}
+            )
+
+            if response.status_code != 200:
+                raise Exception(f"GraphQL failed: {response.status_code}")
+
+            data = response.json()
+
+            if "errors" in data or not data.get("data", {}).get("matchedUser"):
+                raise Exception("User not found")
+
+            # Extract stats
+            matched_user = data["data"]["matchedUser"]
+            topic_counts = {}
+            difficulty_breakdown = {}
+            total_solved = 0
+
+            # Parse submission stats
+            submit_stats = matched_user.get("submitStats", {}).get("acSubmissionNum", [])
+            for stat in submit_stats:
+                difficulty = stat.get("difficulty", "").lower()
+                count = stat.get("count", 0)
+                total_solved += count
+
+                # Use difficulty as topic placeholder
+                if difficulty:
+                    if difficulty not in difficulty_breakdown:
+                        difficulty_breakdown[difficulty] = {"easy": 0, "medium": 0, "hard": 0}
+
+            # Default weekly pace estimate
+            weekly_pace = 5 if total_solved == 0 else round(total_solved / 50, 2)
+
+            return {
+                "source": "leetcode",
+                "topic_counts": topic_counts,
+                "difficulty_breakdown": difficulty_breakdown,
+                "total_solved": total_solved,
+                "weekly_pace": weekly_pace
+            }
+    except Exception as e:
+        raise Exception(f"LeetCode GraphQL fallback failed: {str(e)}")
 
 def parse_hackerrank_csv(csv_content: str) -> dict:
     """Parse HackerRank CSV export and return topic counts."""
@@ -2642,17 +2732,37 @@ except:
 
 # API Endpoints for Coding Round Intel
 
-@app.post("/api/coding-intel/parse/leetcode")
-async def parse_leetcode(file: UploadFile = File(...), current_user = Depends(get_current_user)):
-    """Parse LeetCode CSV export and return parsed profile."""
+@app.get("/api/coding-intel/parse/leetcode")
+async def parse_leetcode(username: str = Query(..., description="LeetCode username"), current_user = Depends(get_current_user)):
+    """Fetch LeetCode profile by username and return parsed profile."""
     try:
-        content = await file.read()
-        csv_content = content.decode("utf-8")
-        
-        profile = parse_leetcode_csv(csv_content)
-        return profile
+        # Validate username exists
+        if not username or len(username.strip()) == 0:
+            raise HTTPException(status_code=400, detail="Username cannot be empty")
+
+        username = username.strip()
+
+        # Try primary API first
+        try:
+            profile = await fetch_leetcode_profile(username)
+            return profile
+        except Exception as primary_error:
+            print(f"Primary API failed: {primary_error}")
+
+            # Try fallback GraphQL
+            try:
+                profile = await fetch_leetcode_profile_fallback(username)
+                return profile
+            except Exception as fallback_error:
+                print(f"Fallback GraphQL failed: {fallback_error}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Could not fetch LeetCode profile for '{username}'. Please try again or enter manually."
+                )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error parsing LeetCode CSV: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching LeetCode profile: {str(e)}")
 
 @app.post("/api/coding-intel/parse/hackerrank")
 async def parse_hackerrank(file: UploadFile = File(...), current_user = Depends(get_current_user)):

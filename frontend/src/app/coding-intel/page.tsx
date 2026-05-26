@@ -44,6 +44,8 @@ const CodingIntelPage = () => {
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [companies, setCompanies] = useState<string[]>([]);
   const [gapAnalysis, setGapAnalysis] = useState<GapAnalysis | null>(null);
+  const [leetcodeUsername, setLeetcodeUsername] = useState('');
+  const [leetcodeFetching, setLeetcodeFetching] = useState(false);
   const [manualTopics, setManualTopics] = useState<{[key: string]: number}>({
     'Dynamic Programming': 0,
     'Trees': 0,
@@ -98,6 +100,42 @@ const CodingIntelPage = () => {
     }
   };
 
+  const handleFetchLeetCode = async () => {
+    if (!leetcodeUsername.trim()) {
+      alert('Please enter your LeetCode username');
+      return;
+    }
+
+    setLeetcodeFetching(true);
+    try {
+      const response = await axios.get('/api/coding-intel/parse/leetcode', {
+        params: { username: leetcodeUsername.trim() },
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      // Save profile
+      await axios.post('/api/coding-intel/profile', response.data, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      setUserProfile(response.data);
+      alert(`✅ Fetched ${response.data.total_solved} problems across ${Object.keys(response.data.topic_counts).length} topics`);
+      setLeetcodeUsername('');
+    } catch (error: any) {
+      console.error('Error fetching LeetCode profile:', error);
+      const errorMessage = error?.response?.data?.detail || 'Could not fetch profile. Try again or enter manually.';
+      alert(`❌ ${errorMessage}`);
+      // Auto-switch to manual entry on error
+      setActiveTab('manual');
+    } finally {
+      setLeetcodeFetching(false);
+    }
+  };
+
   const handleFileUpload = async (file: File) => {
     if (!file) return;
 
@@ -106,10 +144,8 @@ const CodingIntelPage = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      let endpoint = '/api/coding-intel/parse/leetcode';
-      if (activeTab === 'hackerrank') {
-        endpoint = '/api/coding-intel/parse/hackerrank';
-      }
+      // Only HackerRank uses file upload now
+      let endpoint = '/api/coding-intel/parse/hackerrank';
 
       const response = await axios.post(endpoint, formData, {
         headers: {
@@ -119,7 +155,7 @@ const CodingIntelPage = () => {
       });
 
       // Save profile
-      const saveResponse = await axios.post('/api/coding-intel/profile', response.data, {
+      await axios.post('/api/coding-intel/profile', response.data, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -239,26 +275,28 @@ const CodingIntelPage = () => {
           {/* LeetCode Tab */}
           {activeTab === 'leetcode' && (
             <div>
-              <p className="text-slate-600 mb-4">Go to <strong>leetcode.com → Profile → Download CSV</strong></p>
-              <label
-                onDragEnter={handleDragActive}
-                onDragLeave={handleDragInactive}
-                onDragOver={handleDragActive}
-                onDrop={handleDrop}
-                className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 cursor-pointer transition ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50'}`}
-              >
+              <p className="text-slate-600 mb-6">Enter your LeetCode username to fetch your solved problems</p>
+              <div className="flex gap-3">
                 <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => e.target.files && handleFileUpload(e.target.files[0])}
-                  className="hidden"
+                  type="text"
+                  placeholder="e.g., your_username"
+                  value={leetcodeUsername}
+                  onChange={(e) => setLeetcodeUsername(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleFetchLeetCode()}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={leetcodeFetching}
                 />
-                <div className="text-center">
-                  <div className="text-4xl mb-2">📁</div>
-                  <p className="text-slate-900 font-semibold mb-1">Drop CSV file here</p>
-                  <p className="text-slate-600 text-sm">or click to browse</p>
-                </div>
-              </label>
+                <button
+                  onClick={handleFetchLeetCode}
+                  disabled={leetcodeFetching}
+                  className={`px-6 py-2 font-semibold rounded-lg transition ${leetcodeFetching ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  {leetcodeFetching ? 'Fetching...' : 'Fetch Profile'}
+                </button>
+              </div>
+              {leetcodeFetching && (
+                <p className="text-blue-600 text-sm mt-3">⏳ Fetching your LeetCode profile...</p>
+              )}
             </div>
           )}
 
