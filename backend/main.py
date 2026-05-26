@@ -2430,7 +2430,7 @@ def normalize_topic(raw_topic: str) -> Optional[str]:
 async def fetch_leetcode_profile(username: str) -> dict:
     """Fetch LeetCode profile from API wrapper. Returns topic counts and stats."""
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             # Try the wrapper API first
             skills_url = f"https://leetcode-api-pied.vercel.app/user/{username}/skills"
             skills_response = await client.get(skills_url)
@@ -2449,11 +2449,16 @@ async def fetch_leetcode_profile(username: str) -> dict:
             topic_counts = {}
             difficulty_breakdown = {}
 
-            if "skills" in skills_data:
-                for skill in skills_data["skills"]:
-                    skill_name = skill.get("name", "")
-                    count = skill.get("problems", 0)
+            # Handle different response formats
+            skills_list = skills_data.get("skills", []) or []
+            if not skills_list and isinstance(skills_data, list):
+                skills_list = skills_data
 
+            for skill in skills_list:
+                skill_name = skill.get("name", "") if isinstance(skill, dict) else str(skill)
+                count = skill.get("problems", 0) if isinstance(skill, dict) else 0
+
+                if skill_name and count > 0:
                     normalized = normalize_topic(skill_name)
                     if normalized:
                         topic_counts[normalized] = topic_counts.get(normalized, 0) + count
@@ -2463,7 +2468,7 @@ async def fetch_leetcode_profile(username: str) -> dict:
                             difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
 
             # Calculate total solved and weekly pace
-            total_solved = sum(topic_counts.values())
+            total_solved = sum(topic_counts.values()) if topic_counts else stats_data.get("totalSolved", 0)
 
             # Estimate weekly pace: total_solved / weeks_active
             weekly_pace = None
@@ -2475,6 +2480,10 @@ async def fetch_leetcode_profile(username: str) -> dict:
                     weekly_pace = round(total_solved / weeks_active, 2)
                 except:
                     pass
+
+            # If no weekly pace calculated, estimate from total
+            if not weekly_pace and total_solved > 0:
+                weekly_pace = round(total_solved / 52, 2)  # Rough estimate
 
             return {
                 "source": "leetcode",
@@ -2571,22 +2580,83 @@ def parse_hackerrank_csv(csv_content: str) -> dict:
     difficulty_breakdown = {}
     total_solved = 0
     dates = []
-    
+
     f = io.StringIO(csv_content)
     reader = csv.DictReader(f)
-    
+
     for row in reader:
         # Only count solved problems
         if row.get("Status", "").lower() != "solved":
             continue
-        
+
         total_solved += 1
-        
+
         # Parse subdomain as topic
         subdomain = row.get("Subdomain", "").strip()
         normalized = normalize_topic(subdomain)
         if normalized:
             topic_counts[normalized] = topic_counts.get(normalized, 0) + 1
+
+            if normalized not in difficulty_breakdown:
+                difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
+
+    # Calculate weekly pace from dates if available
+    weekly_pace = None
+    if dates:
+        days_span = (max(dates) - min(dates)).days + 1
+        weeks_span = days_span / 7
+        weekly_pace = total_solved / weeks_span if weeks_span > 0 else None
+
+    return {
+        "source": "hackerrank",
+        "topic_counts": topic_counts,
+        "difficulty_breakdown": difficulty_breakdown,
+        "total_solved": total_solved,
+        "weekly_pace": weekly_pace
+    }
+
+def parse_hackerrank_json(json_content: str) -> dict:
+    """Parse HackerRank JSON export and return topic counts."""
+    topic_counts = {}
+    difficulty_breakdown = {}
+    total_solved = 0
+
+    try:
+        data = json.loads(json_content)
+    except json.JSONDecodeError as e:
+        raise Exception(f"Invalid JSON format: {str(e)}")
+
+    # HackerRank JSON is typically an array of challenge objects
+    challenges = data if isinstance(data, list) else data.get("challenges", [])
+
+    for challenge in challenges:
+        # Only count solved problems
+        if challenge.get("status", "").lower() != "solved":
+            continue
+
+        total_solved += 1
+
+        # Parse subdomain/category as topic
+        subdomain = challenge.get("subdomain") or challenge.get("category") or ""
+        subdomain = subdomain.strip()
+
+        normalized = normalize_topic(subdomain)
+        if normalized:
+            topic_counts[normalized] = topic_counts.get(normalized, 0) + 1
+
+            if normalized not in difficulty_breakdown:
+                difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
+
+    # Estimate weekly pace (default 5 problems/week if no data)
+    weekly_pace = 5 if total_solved == 0 else round(total_solved / 10, 2)
+
+    return {
+        "source": "hackerrank",
+        "topic_counts": topic_counts,
+        "difficulty_breakdown": difficulty_breakdown,
+        "total_solved": total_solved,
+        "weekly_pace": weekly_pace
+    }
             
             # Difficulty tracking (HackerRank doesn't have explicit difficulty, default to medium)
             if normalized not in difficulty_breakdown:
@@ -2766,15 +2836,27 @@ async def parse_leetcode(username: str = Query(..., description="LeetCode userna
 
 @app.post("/api/coding-intel/parse/hackerrank")
 async def parse_hackerrank(file: UploadFile = File(...), current_user = Depends(get_current_user)):
-    """Parse HackerRank CSV export and return parsed profile."""
+    """Parse HackerRank JSON or CSV export and return parsed profile."""
     try:
         content = await file.read()
-        csv_content = content.decode("utf-8")
-        
-        profile = parse_hackerrank_csv(csv_content)
-        return profile
+        text_content = content.decode("utf-8")
+
+        # Detect file format: try JSON first, then CSV
+        try:
+            # Try JSON format first
+            profile = parse_hackerrank_json(text_content)
+            return profile
+        except:
+            # Fall back to CSV format
+            try:
+                profile = parse_hackerrank_csv(text_content)
+                return profile
+            except Exception as csv_error:
+                raise HTTPException(status_code=400, detail=f"Error parsing HackerRank file: {str(csv_error)}")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error parsing HackerRank CSV: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error processing HackerRank file: {str(e)}")
 
 @app.post("/api/coding-intel/manual")
 async def manual_entry(topics: dict, current_user = Depends(get_current_user)):
