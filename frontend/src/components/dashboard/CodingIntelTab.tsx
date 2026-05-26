@@ -282,7 +282,7 @@ const CodingIntelContent = () => {
 
         {activeTab === 'hackerrank' && (
           <div>
-            <p className="text-slate-600 mb-4">Go to <strong>hackerrank.com → Profile → Download submission history</strong></p>
+            <p className="text-slate-600 mb-6">Go to <strong>hackerrank.com → Profile → Download submission history (JSON)</strong></p>
             <label
               onDragEnter={handleDragActive}
               onDragLeave={handleDragInactive}
@@ -292,13 +292,13 @@ const CodingIntelContent = () => {
             >
               <input
                 type="file"
-                accept=".csv"
+                accept=".json,.csv"
                 onChange={(e) => e.target.files && handleFileUpload(e.target.files[0])}
                 className="hidden"
               />
               <div className="text-center">
                 <div className="text-3xl mb-2">📁</div>
-                <p className="text-slate-900 font-semibold mb-1">Drop CSV file here</p>
+                <p className="text-slate-900 font-semibold mb-1">Drop JSON file here</p>
                 <p className="text-slate-600 text-sm">or click to browse</p>
               </div>
             </label>
@@ -306,26 +306,39 @@ const CodingIntelContent = () => {
         )}
 
         {activeTab === 'manual' && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Object.entries(manualTopics).map(([topic, count]) => (
-              <div key={topic}>
-                <label className="text-sm font-semibold text-slate-700 mb-2 block">{topic}</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={count}
-                  onChange={(e) => setManualTopics({...manualTopics, [topic]: parseInt(e.target.value) || 0})}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                />
-              </div>
-            ))}
-            <button
-              onClick={handleManualSubmit}
-              className="col-span-2 md:col-span-3 mt-4 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
-            >
-              Submit Manual Entry
-            </button>
+          <div>
+            <p className="text-slate-600 mb-6">Enter how many problems you've solved in each topic</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {Object.entries(manualTopics).map(([topic, count]) => (
+                <div key={topic}>
+                  <label className="text-sm font-semibold text-slate-700 mb-2 block">{topic}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={count}
+                    onChange={(e) => setManualTopics({...manualTopics, [topic]: parseInt(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                </div>
+              ))}
+              <button
+                onClick={handleManualSubmit}
+                className="col-span-2 md:col-span-3 mt-4 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
+              >
+                Submit Manual Entry
+              </button>
+            </div>
+            <style>{`
+              input[type="number"]::-webkit-outer-spin-button,
+              input[type="number"]::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+              }
+              input[type="number"] {
+                -moz-appearance: textfield;
+              }
+            `}</style>
           </div>
         )}
       </div>
