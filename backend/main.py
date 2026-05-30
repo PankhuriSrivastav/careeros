@@ -2377,7 +2377,8 @@ TOPIC_NORMALIZATION = {
     "Tries": ["Trie"],
     "Greedy": ["Greedy"],
     "Math/Bit Manipulation": ["Math", "Mathematics", "Bit Manipulation", "Bit", "bit-manipulation", "basic-mathematics", "statistics", "number-theory"],
-    "Stack/Queue": ["Stack", "Stacks", "Queue", "Queues", "Monotonic Stack", "deque"]
+    "Stack/Queue": ["Stack", "Stacks", "Queue", "Queues", "Monotonic Stack", "deque"],
+    "General Problem Solving": ["problem solving", "problem-solving", "algorithms", "algorithm", "data structures", "data-structures", "practice"]
 }
 
 TOPIC_KEYWORDS = {
@@ -2395,7 +2396,8 @@ TOPIC_KEYWORDS = {
     "Tries": ["trie", "prefix tree"],
     "Greedy": ["greedy", "minimum", "maximum", "interval"],
     "Math/Bit Manipulation": ["math", "bit", "xor", "prime", "factor", "modulo", "statistics"],
-    "Stack/Queue": ["stack", "queue", "deque", "balanced brackets", "parentheses"]
+    "Stack/Queue": ["stack", "queue", "deque", "balanced brackets", "parentheses"],
+    "General Problem Solving": ["solve me", "plus minus", "mini max", "staircase", "grading students", "kangaroo", "apple and orange", "birthday cake"]
 }
 
 # Pydantic models for coding-intel
@@ -2787,6 +2789,8 @@ def parse_hackerrank_csv(csv_content: str) -> dict:
                 if normalize_topic(candidate):
                     subdomain = candidate
                     break
+        if not normalize_topic(subdomain):
+            subdomain = _hackerrank_fallback_topic(row)
         if subdomain and normalize_topic(subdomain):
             total_solved += 1
             _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")
@@ -2880,6 +2884,15 @@ def _hackerrank_topic_from_record(record: dict) -> Optional[str]:
 
     return None
 
+def _hackerrank_fallback_topic(record: dict) -> Optional[str]:
+    """Keep solved HackerRank practice visible when exports omit usable topic metadata."""
+    joined = " ".join(_collect_strings(record, max_items=50)).lower()
+    if any(word in joined for word in ["sql", "database", "select ", "query"]):
+        return None
+    if any(word in joined for word in ["java", "python", "c++", "javascript", "language proficiency"]):
+        return None
+    return "General Problem Solving"
+
 def parse_hackerrank_json(json_content: str) -> dict:
     """Parse HackerRank JSON export and return topic counts."""
     topic_counts = {}
@@ -2900,6 +2913,8 @@ def parse_hackerrank_json(json_content: str) -> dict:
 
         # Parse subdomain/category as topic
         subdomain = _hackerrank_topic_from_record(challenge)
+        if not subdomain:
+            subdomain = _hackerrank_fallback_topic(challenge)
         if subdomain:
             total_solved += 1
             _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")

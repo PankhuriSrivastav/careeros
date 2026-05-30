@@ -330,6 +330,10 @@ const CodingIntelContent = () => {
     );
   };
 
+  const topicEntries = userProfile
+    ? Object.entries(userProfile.topic_counts).sort((a, b) => b[1] - a[1])
+    : [];
+
   return (
     <div className="space-y-6">
       {/* Section 1: Input Panel */}
@@ -460,6 +464,23 @@ const CodingIntelContent = () => {
                 </span>
               ))}
             </div>
+          )}
+          {topicEntries.length > 0 ? (
+            <div className="mt-4">
+              <h3 className="text-sm font-bold text-slate-900 mb-2">Topic breakdown</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {topicEntries.map(([topic, count]) => (
+                  <div key={topic} className="flex items-center justify-between rounded-lg border border-blue-100 bg-white px-3 py-2">
+                    <span className="text-sm font-medium text-slate-800">{topic}</span>
+                    <span className="text-sm font-bold text-blue-700">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-amber-700">
+              No topic breakdown is available yet. Try another source or use Manual Entry to add counts.
+            </p>
           )}
         </div>
       )}
