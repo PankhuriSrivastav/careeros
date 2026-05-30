@@ -159,9 +159,10 @@ const CodingIntelPage = () => {
 
       setUserProfile(response.data);
       alert(`✅ ${response.data.total_solved} problems detected across ${Object.keys(response.data.topic_counts).length} topics`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading file:', error);
-      alert('❌ Error parsing CSV file');
+      const errorMessage = error?.response?.data?.detail || 'Error parsing HackerRank file';
+      alert(`❌ ${errorMessage}`);
     } finally {
       setLoading(false);
     }
