@@ -5,7 +5,7 @@ import json
 import re
 import asyncio
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -3203,7 +3203,7 @@ async def parse_hackerrank(file: UploadFile = File(...), current_user = Depends(
         raise HTTPException(status_code=400, detail=f"Error processing HackerRank file: {str(e)}")
 
 @app.post("/api/coding-intel/manual")
-async def manual_entry(topics: dict, current_user = Depends(get_current_user)):
+async def manual_entry(topics: dict = Body(...), current_user = Depends(get_current_user)):
     """Accept manual topic entry."""
     return {
         "source": "manual",
@@ -3215,7 +3215,7 @@ async def manual_entry(topics: dict, current_user = Depends(get_current_user)):
 
 @app.post("/api/coding-intel/profile")
 async def save_profile(
-    profile_data: dict,
+    profile_data: dict = Body(...),
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
