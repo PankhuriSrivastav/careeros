@@ -153,7 +153,9 @@ export default function TailoringWorkspace({
           {step1Complete && <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Complete</span>}
         </div>
 
+        <label htmlFor="company-select" className="sr-only">Select a company for tailoring</label>
         <select
+          id="company-select"
           value={selectedCompany}
           onChange={(e) => handleCompanyChange(e.target.value)}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

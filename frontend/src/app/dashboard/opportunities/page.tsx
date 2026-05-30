@@ -197,7 +197,9 @@ export default function OpportunityFinderPage() {
         </p>
 
         <div className="flex gap-2 flex-wrap sm:flex-nowrap items-stretch">
+          <label htmlFor="opportunity-filter" className="sr-only">Filter opportunities by type</label>
           <select
+            id="opportunity-filter"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="flex-1 min-w-[200px] px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white"

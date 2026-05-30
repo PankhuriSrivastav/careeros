@@ -115,8 +115,10 @@ export default function ApplicationList({ applications, onDelete, onUpdate }: Ap
 
           {/* Status Filter */}
           <div className="relative">
+            <label htmlFor="status-filter" className="sr-only">Filter by Status</label>
             <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <select
+              id="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"

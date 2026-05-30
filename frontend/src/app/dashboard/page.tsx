@@ -143,7 +143,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <div className="p-8">
+        <main className="p-8">
           {activeTab === 'applications' && (
             <ApplicationsTab
               applications={applications}
@@ -179,7 +179,7 @@ export default function DashboardPage() {
           {activeTab === 'coding-intel' && (
             <CodingIntelTab />
           )}
-        </div>
+        </main>
       </div>
     </div>
   );
