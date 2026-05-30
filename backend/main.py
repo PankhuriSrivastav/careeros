@@ -2363,21 +2363,39 @@ async def get_referral_history(
 
 # Topic normalization mapping
 TOPIC_NORMALIZATION = {
-    "Dynamic Programming": ["DP", "Dynamic Programming", "dynamic-programming"],
-    "Trees": ["Tree", "Trees", "Binary Tree", "Binary Search Tree", "tree-traversal"],
+    "Dynamic Programming": ["DP", "Dynamic Programming", "dynamic-programming", "memoization"],
+    "Trees": ["Tree", "Trees", "Binary Tree", "Binary Search Tree", "tree-traversal", "binary-trees"],
     "Graphs": ["Graph", "Graphs", "BFS", "DFS", "Graph Theory", "graph-theory"],
-    "Arrays": ["Array", "Arrays", "array-manipulation"],
+    "Arrays": ["Array", "Arrays", "array-manipulation", "implementation", "warmup", "problem-solving", "algorithms"],
     "Linked Lists": ["Linked List", "Linked Lists", "linked-list"],
     "Binary Search": ["Binary Search", "binary-search"],
     "Sorting": ["Sorting", "sort", "sorting-algorithms"],
-    "Hashmaps": ["Hash Table", "Hash Map", "Hashmap", "Dictionaries and Hashmaps", "dictionaries-and-hashmaps"],
-    "Strings": ["String", "Strings", "Regex", "regular-expressions"],
-    "Recursion": ["Recursion", "Backtracking", "recursion", "backtracking"],
-    "Heaps": ["Heap", "Heaps", "Priority Queue", "priority-queue"],
+    "Hashmaps": ["Hash Table", "Hash Map", "Hashmap", "Dictionaries and Hashmaps", "dictionaries-and-hashmaps", "collections", "dictionary", "map"],
+    "Strings": ["String", "Strings", "Regex", "regular-expressions", "regex-and-parsing"],
+    "Recursion": ["Recursion", "Backtracking", "recursion", "backtracking", "functional-programming"],
+    "Heaps": ["Heap", "Heaps", "Priority Queue", "priority-queue", "heapq"],
     "Tries": ["Trie"],
     "Greedy": ["Greedy"],
-    "Math/Bit Manipulation": ["Math", "Mathematics", "Bit Manipulation", "Bit", "bit-manipulation"],
-    "Stack/Queue": ["Stack", "Stacks", "Queue", "Queues", "Monotonic Stack"]
+    "Math/Bit Manipulation": ["Math", "Mathematics", "Bit Manipulation", "Bit", "bit-manipulation", "basic-mathematics", "statistics", "number-theory"],
+    "Stack/Queue": ["Stack", "Stacks", "Queue", "Queues", "Monotonic Stack", "deque"]
+}
+
+TOPIC_KEYWORDS = {
+    "Dynamic Programming": ["dynamic programming", "memoization", "coin change", "climbing stairs", "subsequence", "knapsack"],
+    "Trees": ["tree", "binary search tree", "bst", "inorder", "preorder", "postorder", "lowest common ancestor"],
+    "Graphs": ["graph", "bfs", "dfs", "shortest path", "dijkstra", "connected component", "island"],
+    "Arrays": ["array", "list", "subarray", "matrix", "grid", "triplet", "diagonal", "hourglass", "implementation", "warmup"],
+    "Linked Lists": ["linked list", "linked-list"],
+    "Binary Search": ["binary search", "lower bound", "upper bound"],
+    "Sorting": ["sort", "sorting", "merge sort", "quick sort"],
+    "Hashmaps": ["hash", "dictionary", "hashmap", "hash map", "counter", "frequency", "anagram"],
+    "Strings": ["string", "substring", "palindrome", "regex", "regular expression", "anagram"],
+    "Recursion": ["recursion", "recursive", "backtracking", "permutation", "combination"],
+    "Heaps": ["heap", "priority queue"],
+    "Tries": ["trie", "prefix tree"],
+    "Greedy": ["greedy", "minimum", "maximum", "interval"],
+    "Math/Bit Manipulation": ["math", "bit", "xor", "prime", "factor", "modulo", "statistics"],
+    "Stack/Queue": ["stack", "queue", "deque", "balanced brackets", "parentheses"]
 }
 
 # Pydantic models for coding-intel
@@ -2442,6 +2460,9 @@ def normalize_topic(raw_topic: str) -> Optional[str]:
             return standard_topic
         if any(alias and alias in normalized_raw for alias in normalized_aliases):
             return standard_topic
+    for standard_topic, keywords in TOPIC_KEYWORDS.items():
+        if any(keyword in normalized_raw for keyword in keywords):
+            return standard_topic
     return None
 
 def _safe_int(value, default: int = 0) -> int:
@@ -2471,6 +2492,67 @@ def _first_present(mapping: dict, keys: List[str]):
         if isinstance(mapping, dict) and mapping.get(key) not in (None, ""):
             return mapping.get(key)
     return None
+
+def _nested_get(mapping: dict, path: List[str]):
+    current = mapping
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+def _collect_strings(value, max_items: int = 30) -> List[str]:
+    strings = []
+    if len(strings) >= max_items:
+        return strings
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        for item in value:
+            strings.extend(_collect_strings(item, max_items - len(strings)))
+            if len(strings) >= max_items:
+                break
+    elif isinstance(value, dict):
+        priority_keys = [
+            "subdomain", "Subdomain", "track", "Track", "domain", "Domain",
+            "category", "Category", "topic", "Topic", "tags", "Tags",
+            "challenge_name", "challengeName", "title", "Title", "name", "Name", "slug"
+        ]
+        for key in priority_keys:
+            if key in value:
+                strings.extend(_collect_strings(value[key], max_items - len(strings)))
+        for nested_key in ("challenge", "Challenge"):
+            if nested_key in value:
+                strings.extend(_collect_strings(value[nested_key], max_items - len(strings)))
+    return strings[:max_items]
+
+def _profile_has_topic_data(profile: dict) -> bool:
+    return bool(profile.get("topic_counts"))
+
+def _extract_total_solved(payload: dict) -> int:
+    if not isinstance(payload, dict):
+        return 0
+
+    direct = _safe_int(
+        payload.get("totalSolved")
+        or payload.get("total_solved")
+        or payload.get("solvedProblem")
+        or payload.get("problemsSolved")
+    )
+    if direct:
+        return direct
+
+    submit_stats = (
+        _nested_get(payload, ["submitStats", "acSubmissionNum"])
+        or _nested_get(payload, ["matchedUser", "submitStats", "acSubmissionNum"])
+        or _nested_get(payload, ["data", "matchedUser", "submitStats", "acSubmissionNum"])
+        or []
+    )
+    for stat in submit_stats:
+        if str(stat.get("difficulty", "")).lower() == "all":
+            return _safe_int(stat.get("count"))
+
+    return 0
 
 def _json_dict_or_empty(value) -> dict:
     if isinstance(value, dict):
@@ -2510,7 +2592,13 @@ async def fetch_leetcode_profile(username: str) -> dict:
             if isinstance(skills_data, list):
                 skills_list = skills_data
             elif isinstance(skills_data, dict):
-                skills_list = skills_data.get("skills") or skills_data.get("topics") or skills_data.get("tags") or []
+                skills_list = (
+                    skills_data.get("skills")
+                    or skills_data.get("topics")
+                    or skills_data.get("tags")
+                    or skills_data.get("skillStats")
+                    or []
+                )
                 tag_counts = (
                     skills_data.get("tagProblemCounts")
                     or skills_data.get("data", {}).get("matchedUser", {}).get("tagProblemCounts")
@@ -2529,8 +2617,8 @@ async def fetch_leetcode_profile(username: str) -> dict:
 
             for skill in skills_list:
                 if isinstance(skill, dict):
-                    skill_name = _first_present(skill, ["name", "tagName", "topic", "slug"])
-                    count = _safe_int(_first_present(skill, ["problemsSolved", "problems", "count", "solved"]))
+                    skill_name = _first_present(skill, ["name", "tagName", "topic", "slug", "tagSlug"])
+                    count = _safe_int(_first_present(skill, ["problemsSolved", "problems", "count", "solved", "problemsCount"]))
                 else:
                     skill_name = str(skill)
                     count = 1
@@ -2538,7 +2626,10 @@ async def fetch_leetcode_profile(username: str) -> dict:
                 _add_topic_count(topic_counts, difficulty_breakdown, skill_name, count, "medium")
 
             # Calculate total solved and weekly pace
-            total_solved = sum(topic_counts.values()) if topic_counts else _safe_int(stats_data.get("totalSolved", 0))
+            total_solved = sum(topic_counts.values()) if topic_counts else _extract_total_solved(stats_data)
+
+            if not topic_counts:
+                raise Exception("LeetCode API returned no topic data")
 
             # Estimate weekly pace: total_solved / weeks_active
             weekly_pace = None
@@ -2657,6 +2748,9 @@ async def fetch_leetcode_profile_fallback(username: str) -> dict:
             if total_solved == 0:
                 total_solved = sum(topic_counts.values())
 
+            if not topic_counts:
+                raise Exception("LeetCode returned no topic data for this username")
+
             # Default weekly pace estimate
             weekly_pace = 5 if total_solved == 0 else round(total_solved / 50, 2)
 
@@ -2686,11 +2780,16 @@ def parse_hackerrank_csv(csv_content: str) -> dict:
         if status and status not in {"solved", "accepted", "ac", "correct", "passed"}:
             continue
 
-        total_solved += 1
-
         # Parse subdomain as topic
         subdomain = _first_present(row, ["Subdomain", "subdomain", "Track", "track", "Domain", "domain", "Category", "category", "Challenge", "challenge"])
-        _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")
+        if not normalize_topic(subdomain):
+            for candidate in _collect_strings(row):
+                if normalize_topic(candidate):
+                    subdomain = candidate
+                    break
+        if subdomain and normalize_topic(subdomain):
+            total_solved += 1
+            _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")
 
         # Extract date
         try:
@@ -2699,6 +2798,9 @@ def parse_hackerrank_csv(csv_content: str) -> dict:
                 dates.append(dt.strptime(str(date_str)[:10], "%Y-%m-%d"))
         except Exception:
             pass
+
+    if reader.line_num > 0 and total_solved == 0:
+        raise Exception("No solved HackerRank DSA topics found in this file")
 
     # Calculate weekly pace from dates if available
     weekly_pace = None
@@ -2753,7 +2855,9 @@ def _hackerrank_topic_from_record(record: dict) -> Optional[str]:
             if normalize_topic(topic):
                 return str(topic)
     if direct_topic:
-        return str(direct_topic)
+        direct_topic_text = str(direct_topic)
+        if normalize_topic(direct_topic_text):
+            return direct_topic_text
 
     challenge = record.get("challenge") or record.get("Challenge") or {}
     if isinstance(challenge, dict):
@@ -2766,9 +2870,15 @@ def _hackerrank_topic_from_record(record: dict) -> Optional[str]:
                 if normalize_topic(topic):
                     return str(topic)
         if nested_topic:
-            return str(nested_topic)
+            nested_topic_text = str(nested_topic)
+            if normalize_topic(nested_topic_text):
+                return nested_topic_text
 
-    return _first_present(record, ["challenge_name", "challengeName", "name", "Name", "slug"])
+    for candidate in _collect_strings(record):
+        if normalize_topic(candidate):
+            return candidate
+
+    return None
 
 def parse_hackerrank_json(json_content: str) -> dict:
     """Parse HackerRank JSON export and return topic counts."""
@@ -2788,11 +2898,14 @@ def parse_hackerrank_json(json_content: str) -> dict:
         if not _hackerrank_status_is_solved(challenge):
             continue
 
-        total_solved += 1
-
         # Parse subdomain/category as topic
         subdomain = _hackerrank_topic_from_record(challenge)
-        _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")
+        if subdomain:
+            total_solved += 1
+            _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")
+
+    if challenges and total_solved == 0:
+        raise Exception("No solved HackerRank DSA topics found in this file")
 
     # Estimate weekly pace (default 5 problems/week if no data)
     weekly_pace = 5 if total_solved == 0 else round(total_solved / 10, 2)
@@ -3025,6 +3138,8 @@ async def parse_leetcode(username: str = Query(..., description="LeetCode userna
             # Try fallback GraphQL
             try:
                 profile = await fetch_leetcode_profile_fallback(username)
+                if not _profile_has_topic_data(profile):
+                    raise Exception("LeetCode returned no topic data")
                 return profile
             except Exception as fallback_error:
                 print(f"Fallback GraphQL failed: {fallback_error}")
@@ -3044,18 +3159,29 @@ async def parse_hackerrank(file: UploadFile = File(...), current_user = Depends(
         content = await file.read()
         text_content = content.decode("utf-8")
 
-        # Detect file format: try JSON first, then CSV
-        try:
-            # Try JSON format first
-            profile = parse_hackerrank_json(text_content)
-            return profile
-        except:
-            # Fall back to CSV format
+        if file.filename and file.filename.lower().endswith(".json"):
             try:
-                profile = parse_hackerrank_csv(text_content)
-                return profile
+                return parse_hackerrank_json(text_content)
+            except Exception as json_error:
+                raise HTTPException(status_code=400, detail=f"Error parsing HackerRank JSON: {str(json_error)}")
+
+        if file.filename and file.filename.lower().endswith(".csv"):
+            try:
+                return parse_hackerrank_csv(text_content)
+            except Exception as csv_error:
+                raise HTTPException(status_code=400, detail=f"Error parsing HackerRank CSV: {str(csv_error)}")
+
+        # Unknown extension: detect file format.
+        try:
+            json.loads(text_content)
+            return parse_hackerrank_json(text_content)
+        except json.JSONDecodeError:
+            try:
+                return parse_hackerrank_csv(text_content)
             except Exception as csv_error:
                 raise HTTPException(status_code=400, detail=f"Error parsing HackerRank file: {str(csv_error)}")
+        except Exception as json_error:
+            raise HTTPException(status_code=400, detail=f"Error parsing HackerRank JSON: {str(json_error)}")
     except HTTPException:
         raise
     except Exception as e:
