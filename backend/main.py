@@ -2406,6 +2406,11 @@ class TopicGap(BaseModel):
     priority: int
     companies_needing: List[str]
     weeks_to_close: Optional[float] = None
+    problems_needed: int = 0
+    frequency: Optional[str] = None
+    difficulty: Optional[str] = None
+    resources: Optional[dict] = None
+    source: str = "community"
 
 class GapAnalysisResponse(BaseModel):
     critical_gaps: List[TopicGap]
@@ -2837,6 +2842,67 @@ def merge_profiles(*profiles) -> dict:
         "weekly_pace": weekly_pace
     }
 
+async def get_combined_coding_profile(db: AsyncSession, user_id) -> Optional[dict]:
+    """Return a merged profile from the user's latest profile for each source."""
+    stmt = select(CodingProfileTable).where(
+        CodingProfileTable.user_id == user_id
+    ).order_by(desc(CodingProfileTable.created_at))
+
+    result = await db.execute(stmt)
+    records = result.scalars().all()
+    if not records:
+        return None
+
+    latest_by_source = {}
+    latest_combined = None
+    for record in records:
+        if record.source == "combined" and latest_combined is None:
+            latest_combined = record
+        elif record.source not in latest_by_source:
+            latest_by_source[record.source] = record
+
+    selected_records = list(latest_by_source.values())
+    if not selected_records and latest_combined:
+        selected_records = [latest_combined]
+
+    profiles = []
+    source_totals = {}
+    for record in selected_records:
+        profile = {
+            "id": record.id,
+            "source": record.source,
+            "topic_counts": _json_dict_or_empty(record.topic_counts),
+            "difficulty_breakdown": _json_dict_or_empty(record.difficulty_breakdown),
+            "total_solved": record.total_solved,
+            "weekly_pace": float(record.weekly_pace) if record.weekly_pace else None,
+            "created_at": record.created_at.isoformat()
+        }
+        profiles.append(profile)
+        source_totals[record.source] = record.total_solved
+
+    combined = merge_profiles(*profiles)
+    combined["id"] = latest_combined.id if latest_combined else selected_records[0].id
+    combined["sources"] = source_totals
+    combined["created_at"] = selected_records[0].created_at.isoformat()
+    return combined
+
+def estimate_company_pattern(company: str) -> dict:
+    """Fallback topic expectations for companies not yet in the curated database."""
+    return {
+        "role": "SWE Intern",
+        "source": "ai_estimated",
+        "topics": {
+            "Arrays": {"frequency": "high", "expected_problems": 18, "difficulty": "easy-medium", "priority": 1},
+            "Strings": {"frequency": "high", "expected_problems": 12, "difficulty": "easy-medium", "priority": 2},
+            "Hashmaps": {"frequency": "high", "expected_problems": 10, "difficulty": "easy-medium", "priority": 3},
+            "Trees": {"frequency": "medium", "expected_problems": 10, "difficulty": "medium", "priority": 4},
+            "Graphs": {"frequency": "medium", "expected_problems": 8, "difficulty": "medium", "priority": 5},
+            "Dynamic Programming": {"frequency": "medium", "expected_problems": 8, "difficulty": "medium-hard", "priority": 6},
+            "Binary Search": {"frequency": "medium", "expected_problems": 6, "difficulty": "easy-medium", "priority": 7}
+        },
+        "note": f"{company} is not in the curated DSA database yet, so these expectations use a generic SWE interview pattern."
+    }
+
 def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: dict) -> dict:
     """Calculate coverage gaps for user against selected companies."""
     critical_gaps = []
@@ -2848,14 +2914,22 @@ def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: d
     
     # Aggregate what all companies need
     for company in companies:
-        if company not in company_patterns:
-            continue
-        company_data = company_patterns[company]
+        company_data = company_patterns.get(company) or estimate_company_pattern(company)
+        pattern_source = company_data.get("source", "community")
         for topic, info in company_data.get("topics", {}).items():
             if topic not in all_company_needs:
-                all_company_needs[topic] = {"companies": [], "expected": 0, "priority": info.get("priority", 10)}
+                all_company_needs[topic] = {
+                    "companies": [],
+                    "expected": 0,
+                    "priority": info.get("priority", 10),
+                    "frequency": info.get("frequency"),
+                    "difficulty": info.get("difficulty"),
+                    "source": pattern_source
+                }
             all_company_needs[topic]["companies"].append(company)
             all_company_needs[topic]["expected"] = max(all_company_needs[topic]["expected"], info.get("expected_problems", 10))
+            if info.get("priority", 10) < all_company_needs[topic]["priority"]:
+                all_company_needs[topic]["priority"] = info.get("priority", 10)
     
     # Calculate coverage for each topic
     for topic, expected in all_company_needs.items():
@@ -2866,6 +2940,7 @@ def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: d
         pace = user_profile.get("weekly_pace", 5)
         gap = max(0, expected["expected"] - user_solved)
         weeks_to_close = gap / pace if pace > 0 else None
+        topic_resources = DSA_RESOURCES.get(topic, {})
         
         gap_obj = TopicGap(
             topic=topic,
@@ -2875,7 +2950,12 @@ def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: d
             status="covered" if coverage >= 1.0 else "partial" if coverage >= 0.6 else "critical",
             priority=len(expected["companies"]),  # Higher priority = more companies need it
             companies_needing=expected["companies"],
-            weeks_to_close=weeks_to_close
+            weeks_to_close=weeks_to_close,
+            problems_needed=gap,
+            frequency=expected.get("frequency"),
+            difficulty=expected.get("difficulty"),
+            resources=topic_resources,
+            source=expected.get("source", "community")
         )
         
         if gap_obj.status == "critical":
@@ -2888,6 +2968,14 @@ def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: d
     # Sort by priority
     critical_gaps.sort(key=lambda x: (-len(x.companies_needing), x.topic))
     partial_gaps.sort(key=lambda x: (-len(x.companies_needing), x.topic))
+    covered_topics.sort(key=lambda x: (-len(x.companies_needing), x.topic))
+
+    for index, gap in enumerate(critical_gaps, start=1):
+        gap.priority = index
+    for index, gap in enumerate(partial_gaps, start=1):
+        gap.priority = index
+    for index, gap in enumerate(covered_topics, start=1):
+        gap.priority = index
     
     return {
         "critical_gaps": critical_gaps,
@@ -2897,7 +2985,8 @@ def calculate_gaps(user_profile: dict, companies: List[str], company_patterns: d
             "total_topics_covered": len(covered_topics),
             "total_partial": len(partial_gaps),
             "total_critical": len(critical_gaps),
-            "total_topics_analyzed": len(all_company_needs)
+            "total_topics_analyzed": len(all_company_needs),
+            "selected_companies": companies
         }
     }
 
@@ -3028,33 +3117,29 @@ async def analyze_gaps(
     """Analyze coding gaps for selected companies."""
     try:
         user_id = current_user["sub"]
-        
-        # Get user's coding profile
+
         if request.profile_id:
             stmt = select(CodingProfileTable).where(
                 CodingProfileTable.id == request.profile_id,
                 CodingProfileTable.user_id == user_id
             )
+            result = await db.execute(stmt)
+            profile_record = result.scalar_one_or_none()
+
+            if not profile_record:
+                raise HTTPException(status_code=404, detail="No coding profile found")
+
+            user_profile = {
+                "source": profile_record.source,
+                "topic_counts": _json_dict_or_empty(profile_record.topic_counts),
+                "difficulty_breakdown": _json_dict_or_empty(profile_record.difficulty_breakdown),
+                "total_solved": profile_record.total_solved,
+                "weekly_pace": float(profile_record.weekly_pace) if profile_record.weekly_pace else 5.0
+            }
         else:
-            # Get most recent profile
-            stmt = select(CodingProfileTable).where(
-                CodingProfileTable.user_id == user_id
-            ).order_by(desc(CodingProfileTable.created_at)).limit(1)
-        
-        result = await db.execute(stmt)
-        profile_record = result.scalar_one_or_none()
-        
-        if not profile_record:
-            raise HTTPException(status_code=404, detail="No coding profile found")
-        
-        # Reconstruct profile data
-        user_profile = {
-            "source": profile_record.source,
-            "topic_counts": _json_dict_or_empty(profile_record.topic_counts),
-            "difficulty_breakdown": _json_dict_or_empty(profile_record.difficulty_breakdown),
-            "total_solved": profile_record.total_solved,
-            "weekly_pace": float(profile_record.weekly_pace) if profile_record.weekly_pace else 5.0
-        }
+            user_profile = await get_combined_coding_profile(db, user_id)
+            if not user_profile:
+                raise HTTPException(status_code=404, detail="No coding profile found")
         
         # Calculate gaps
         gaps = calculate_gaps(user_profile, request.companies, COMPANY_DSA_PATTERNS)
@@ -3128,28 +3213,12 @@ async def get_profile(
     """Get user's most recent coding profile."""
     try:
         user_id = current_user["sub"]
-        
-        stmt = select(CodingProfileTable).where(
-            CodingProfileTable.user_id == user_id
-        ).order_by(desc(CodingProfileTable.created_at)).limit(1)
-        
-        result = await db.execute(stmt)
-        profile = result.scalar_one_or_none()
-        
+
+        profile = await get_combined_coding_profile(db, user_id)
         if not profile:
             return {"profile": None}
         
-        return {
-            "profile": {
-                "id": profile.id,
-                "source": profile.source,
-                "topic_counts": _json_dict_or_empty(profile.topic_counts),
-                "difficulty_breakdown": _json_dict_or_empty(profile.difficulty_breakdown),
-                "total_solved": profile.total_solved,
-                "weekly_pace": float(profile.weekly_pace) if profile.weekly_pace else None,
-                "created_at": profile.created_at.isoformat()
-            }
-        }
+        return {"profile": profile}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching profile: {str(e)}")
 
@@ -3162,8 +3231,23 @@ async def get_resources(topic: str, current_user = Depends(get_current_user)):
     return DSA_RESOURCES[topic]
 
 @app.get("/api/coding-intel/companies")
-async def get_companies(current_user = Depends(get_current_user)):
-    """Get list of all companies in DSA patterns database."""
-    return {"companies": list(COMPANY_DSA_PATTERNS.keys())}
+async def get_companies(
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get companies from DSA patterns plus the user's application tracker."""
+    company_names = set(COMPANY_DSA_PATTERNS.keys())
+
+    result = await db.execute(
+        select(ApplicationTable.company).where(
+            ApplicationTable.user_id == current_user["sub"],
+            ApplicationTable.company.isnot(None)
+        )
+    )
+    for company in result.scalars().all():
+        if company and company.strip():
+            company_names.add(company.strip())
+
+    return {"companies": sorted(company_names)}
 
 # uvicorn main:app --reload --port 8000

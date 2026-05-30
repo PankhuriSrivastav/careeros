@@ -14,31 +14,35 @@ interface UserProfile {
   total_solved: number;
   weekly_pace?: number;
   difficulty_breakdown?: { [key: string]: { easy: number; medium: number; hard: number } };
+  sources?: { [key: string]: number };
+}
+
+interface TopicResource {
+  must_solve?: Array<{ name: string; difficulty: string; url: string; why?: string }>;
+  youtube?: { name: string; url: string };
+  article?: { name: string; url: string };
+}
+
+interface GapItem {
+  topic: string;
+  user_solved: number;
+  company_expected: number;
+  coverage_percent: number;
+  priority: number;
+  companies_needing: string[];
+  weeks_to_close?: number;
+  problems_needed?: number;
+  frequency?: string;
+  difficulty?: string;
+  resources?: TopicResource;
+  source?: string;
 }
 
 interface GapAnalysis {
-  critical_gaps: Array<{
-    topic: string;
-    user_solved: number;
-    company_expected: number;
-    coverage_percent: number;
-    priority: number;
-    companies_needing: string[];
-    weeks_to_close?: number;
-  }>;
-  partial_gaps: Array<{
-    topic: string;
-    user_solved: number;
-    company_expected: number;
-    coverage_percent: number;
-    companies_needing: string[];
-    weeks_to_close?: number;
-  }>;
-  covered_topics: Array<{
-    topic: string;
-    user_solved: number;
-    company_expected: number;
-  }>;
+  critical_gaps: GapItem[];
+  partial_gaps: GapItem[];
+  covered_topics: GapItem[];
+  summary?: { total_critical: number; total_partial: number; total_topics_covered: number; total_topics_analyzed: number };
 }
 
 const CodingIntelContent = () => {
@@ -69,6 +73,10 @@ const CodingIntelContent = () => {
   });
   const [companySearch, setCompanySearch] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [studyWeeks, setStudyWeeks] = useState(8);
+  const [studyHours, setStudyHours] = useState(2);
+  const [studyPlan, setStudyPlan] = useState('');
+  const [studyPlanLoading, setStudyPlanLoading] = useState(false);
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -117,7 +125,8 @@ const CodingIntelContent = () => {
         headers: getAuthHeaders()
       });
 
-      setUserProfile(response.data);
+      await loadSavedProfile();
+      setGapAnalysis(null);
       alert(`✅ Fetched ${response.data.total_solved} problems across ${Object.keys(response.data.topic_counts).length} topics`);
       setLeetcodeUsername('');
     } catch (error: any) {
@@ -154,7 +163,8 @@ const CodingIntelContent = () => {
         headers: getAuthHeaders()
       });
 
-      setUserProfile(response.data);
+      await loadSavedProfile();
+      setGapAnalysis(null);
       alert(`✅ ${response.data.total_solved} problems detected across ${Object.keys(response.data.topic_counts).length} topics`);
     } catch (error: any) {
       console.error('Error uploading file:', error);
@@ -195,7 +205,8 @@ const CodingIntelContent = () => {
       headers: getAuthHeaders()
     });
 
-    setUserProfile(response.data);
+    await loadSavedProfile();
+    setGapAnalysis(null);
     alert('✅ Manual profile saved');
   };
 
@@ -214,6 +225,7 @@ const CodingIntelContent = () => {
       });
 
       setGapAnalysis(response.data);
+      setStudyPlan('');
     } catch (error) {
       console.error('Error analyzing gaps:', error);
       alert('❌ Error analyzing gaps');
@@ -226,7 +238,97 @@ const CodingIntelContent = () => {
     c.toLowerCase().includes(companySearch.toLowerCase())
   );
 
-  const displayedCompanies = companySearch ? filteredCompanies : selectedCompanies.length > 0 ? selectedCompanies : companies.slice(0, 10);
+  const displayedCompanies = companySearch ? filteredCompanies : companies.slice(0, 12);
+  const addCustomCompany = () => {
+    const company = companySearch.trim();
+    if (!company) return;
+    if (!companies.some(c => c.toLowerCase() === company.toLowerCase())) {
+      setCompanies([...companies, company].sort());
+    }
+    if (!selectedCompanies.some(c => c.toLowerCase() === company.toLowerCase())) {
+      setSelectedCompanies([...selectedCompanies, company]);
+    }
+    setCompanySearch('');
+  };
+
+  const handleGenerateStudyPlan = async () => {
+    if (!gapAnalysis || selectedCompanies.length === 0) return;
+
+    setStudyPlanLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/coding-intel/study-plan`, {
+        weeks_until_interview: studyWeeks,
+        hours_per_day: studyHours,
+        company: selectedCompanies[0],
+        critical_gaps: gapAnalysis.critical_gaps
+      }, {
+        headers: getAuthHeaders()
+      });
+
+      setStudyPlan(response.data.study_plan);
+    } catch (error: any) {
+      console.error('Error generating study plan:', error);
+      alert(`❌ ${error?.response?.data?.detail || 'Error generating study plan'}`);
+    } finally {
+      setStudyPlanLoading(false);
+    }
+  };
+
+  const renderGapCard = (gap: GapItem, tone: 'red' | 'yellow') => {
+    const resources = gap.resources || {};
+    const problems = resources.must_solve?.slice(0, 3) || [];
+
+    return (
+      <div key={gap.topic} className={`${tone === 'red' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'} border rounded-lg p-4`}>
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <h4 className="font-bold text-slate-900">{gap.topic}</h4>
+          <span className="text-xs font-semibold text-slate-600">Priority #{gap.priority}</span>
+        </div>
+        <p className="text-sm text-slate-700 mb-2">
+          You: <strong>{gap.user_solved}</strong> / Need: <strong>{gap.company_expected}</strong>
+          {gap.problems_needed !== undefined && gap.problems_needed > 0 && ` (${gap.problems_needed} more)`}
+        </p>
+        <div className="w-full bg-slate-300 rounded-full h-2 mb-3">
+          <div
+            className={`${tone === 'red' ? 'bg-red-600' : 'bg-yellow-500'} h-2 rounded-full transition`}
+            style={{width: `${Math.min(gap.coverage_percent, 100)}%`}}
+          ></div>
+        </div>
+        <p className="text-xs text-slate-600 mb-2">
+          Needed by: {gap.companies_needing.join(', ')}
+          {gap.source === 'ai_estimated' && ' • AI estimated'}
+        </p>
+        {(gap.frequency || gap.difficulty) && (
+          <p className="text-xs text-slate-600 mb-3">
+            {gap.frequency && `Frequency: ${gap.frequency}`}
+            {gap.frequency && gap.difficulty && ' • '}
+            {gap.difficulty && `Difficulty: ${gap.difficulty}`}
+          </p>
+        )}
+        {problems.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-slate-700 mb-1">Must solve</p>
+            <div className="space-y-1">
+              {problems.map(problem => (
+                <a key={problem.url} href={problem.url} target="_blank" rel="noreferrer" className="block text-sm text-blue-700 hover:underline">
+                  {problem.name} ({problem.difficulty})
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3 text-sm">
+          {resources.youtube && <a href={resources.youtube.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{resources.youtube.name}</a>}
+          {resources.article && <a href={resources.article.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{resources.article.name}</a>}
+        </div>
+        {gap.weeks_to_close && (
+          <p className="text-sm text-slate-900 mt-3">
+            ⏱️ Close in ~<strong>{gap.weeks_to_close.toFixed(1)} weeks</strong> at your pace
+          </p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -350,6 +452,15 @@ const CodingIntelContent = () => {
             <strong>Your profile:</strong> {userProfile.total_solved} problems across {Object.keys(userProfile.topic_counts).length} topics
             {userProfile.weekly_pace && ` • ~${userProfile.weekly_pace.toFixed(1)} problems/week`}
           </p>
+          {userProfile.sources && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {Object.entries(userProfile.sources).map(([source, total]) => (
+                <span key={source} className="px-3 py-1 bg-white border border-blue-200 rounded-full text-xs font-semibold text-slate-700">
+                  {source}: {total}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -359,11 +470,21 @@ const CodingIntelContent = () => {
         
         <input
           type="text"
-          placeholder="Search companies..."
+          placeholder="Search companies or add your own..."
           value={companySearch}
           onChange={(e) => setCompanySearch(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addCustomCompany()}
           className="w-full px-4 py-2 border border-slate-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+
+        {companySearch.trim() && !companies.some(c => c.toLowerCase() === companySearch.trim().toLowerCase()) && (
+          <button
+            onClick={addCustomCompany}
+            className="mb-4 px-4 py-2 bg-slate-900 text-white rounded-lg font-semibold hover:bg-slate-800 transition"
+          >
+            + Add "{companySearch.trim()}"
+          </button>
+        )}
 
         <div className="flex flex-wrap gap-2 mb-6">
           {displayedCompanies.map(company => (
@@ -407,28 +528,7 @@ const CodingIntelContent = () => {
             <div>
               <h3 className="text-xl font-bold text-red-700 mb-4">❌ Critical Gaps</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {gapAnalysis.critical_gaps.map((gap: any) => (
-                  <div key={gap.topic} className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h4 className="font-bold text-slate-900 mb-2">{gap.topic}</h4>
-                    <p className="text-sm text-slate-700 mb-2">
-                      You: <strong>{gap.user_solved}</strong> vs Expected: <strong>{gap.company_expected}</strong>
-                    </p>
-                    <div className="w-full bg-slate-300 rounded-full h-2 mb-3">
-                      <div
-                        className="bg-red-600 h-2 rounded-full transition"
-                        style={{width: `${Math.min(gap.coverage_percent, 100)}%`}}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-slate-600 mb-3">
-                      Needed by: {gap.companies_needing.join(', ')}
-                    </p>
-                    {gap.weeks_to_close && (
-                      <p className="text-sm text-slate-900">
-                        ⏱️ Close in ~<strong>{gap.weeks_to_close.toFixed(1)} weeks</strong>
-                      </p>
-                    )}
-                  </div>
-                ))}
+                {gapAnalysis.critical_gaps.map((gap) => renderGapCard(gap, 'red'))}
               </div>
             </div>
           )}
@@ -437,23 +537,7 @@ const CodingIntelContent = () => {
             <div>
               <h3 className="text-xl font-bold text-yellow-700 mb-4">⚠️ Partial Coverage</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {gapAnalysis.partial_gaps.map((gap: any) => (
-                  <div key={gap.topic} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <h4 className="font-bold text-slate-900 mb-2">{gap.topic}</h4>
-                    <p className="text-sm text-slate-700 mb-2">
-                      You: <strong>{gap.user_solved}</strong> vs Expected: <strong>{gap.company_expected}</strong>
-                    </p>
-                    <div className="w-full bg-slate-300 rounded-full h-2 mb-3">
-                      <div
-                        className="bg-yellow-500 h-2 rounded-full transition"
-                        style={{width: `${Math.min(gap.coverage_percent, 100)}%`}}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-slate-600">
-                      Needed by: {gap.companies_needing.join(', ')}
-                    </p>
-                  </div>
-                ))}
+                {gapAnalysis.partial_gaps.map((gap) => renderGapCard(gap, 'yellow'))}
               </div>
             </div>
           )}
@@ -470,6 +554,45 @@ const CodingIntelContent = () => {
               </div>
             </div>
           )}
+
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-xl font-bold text-slate-900 mb-4">Generate Study Plan</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Weeks until interview</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={studyWeeks}
+                  onChange={(e) => setStudyWeeks(parseInt(e.target.value) || 1)}
+                  className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Hours per day</span>
+                <input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  value={studyHours}
+                  onChange={(e) => setStudyHours(parseFloat(e.target.value) || 1)}
+                  className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <button
+                onClick={handleGenerateStudyPlan}
+                disabled={studyPlanLoading || gapAnalysis.critical_gaps.length === 0}
+                className="self-end px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition disabled:bg-slate-400"
+              >
+                {studyPlanLoading ? 'Generating...' : 'Generate Plan'}
+              </button>
+            </div>
+            {studyPlan && (
+              <pre className="mt-5 whitespace-pre-wrap rounded-lg bg-slate-50 border border-slate-200 p-4 text-sm text-slate-800 font-sans">
+                {studyPlan}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>
