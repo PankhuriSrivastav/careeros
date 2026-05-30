@@ -2646,38 +2646,11 @@ def parse_hackerrank_json(json_content: str) -> dict:
 
             if normalized not in difficulty_breakdown:
                 difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
+            difficulty_breakdown[normalized]["medium"] += 1
 
     # Estimate weekly pace (default 5 problems/week if no data)
     weekly_pace = 5 if total_solved == 0 else round(total_solved / 10, 2)
 
-    return {
-        "source": "hackerrank",
-        "topic_counts": topic_counts,
-        "difficulty_breakdown": difficulty_breakdown,
-        "total_solved": total_solved,
-        "weekly_pace": weekly_pace
-    }
-            
-            # Difficulty tracking (HackerRank doesn't have explicit difficulty, default to medium)
-            if normalized not in difficulty_breakdown:
-                difficulty_breakdown[normalized] = {"easy": 0, "medium": 0, "hard": 0}
-            difficulty_breakdown[normalized]["medium"] += 1
-        
-        # Extract date
-        try:
-            date_str = row.get("Solved On", "")
-            if date_str:
-                dates.append(dt.strptime(date_str, "%Y-%m-%d"))
-        except:
-            pass
-    
-    # Calculate weekly pace
-    weekly_pace = None
-    if dates:
-        days_span = (max(dates) - min(dates)).days + 1
-        weeks_span = days_span / 7
-        weekly_pace = total_solved / weeks_span if weeks_span > 0 else None
-    
     return {
         "source": "hackerrank",
         "topic_counts": topic_counts,
