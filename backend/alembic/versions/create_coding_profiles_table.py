@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.create_table(
         'coding_profiles',
         sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('user_id', sa.String(), nullable=False),  # UUID as string (managed by Supabase)
+        sa.Column('user_id', sa.Uuid(), nullable=False),  # UUID type
         sa.Column('source', sa.String(), nullable=False),  # "leetcode", "hackerrank", "manual", "combined"
         sa.Column('topic_counts', sa.Text(), nullable=False),  # JSON as text
         sa.Column('difficulty_breakdown', sa.Text(), nullable=False),  # JSON as text
