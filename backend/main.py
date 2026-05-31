@@ -2918,8 +2918,7 @@ def _hackerrank_fallback_topic(record: dict) -> Optional[str]:
     """Keep solved HackerRank practice visible when exports omit usable topic metadata."""
     joined = " ".join(_collect_strings(record, max_items=50)).lower()
     if any(word in joined for word in ["sql", "database", "select ", "query"]):
-        return None
-    if any(word in joined for word in ["java", "python", "c++", "javascript", "language proficiency"]):
+        
         return None
     return "General Problem Solving"
 
