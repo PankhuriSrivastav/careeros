@@ -2820,7 +2820,37 @@ def parse_hackerrank_csv(csv_content: str) -> dict:
         "total_solved": total_solved,
         "weekly_pace": weekly_pace
     }
+def _hackerrank_topic_from_submission(record: dict) -> Optional[str]:
+    """Extract topic from HackerRank's basic submission export format."""
+    challenge_name = str(record.get("challenge", "")).lower()
+    language = str(record.get("language", "")).lower()
 
+    topic_keywords = {
+        "Arrays": ["array", "rotation", "hourglass", "left rotation"],
+        "Strings": ["string", "anagram", "palindrome", "caesar", "pangram"],
+        "Linked Lists": ["linked list", "node", "pointer"],
+        "Sorting": ["sort", "bubble", "insertion", "comparator"],
+        "Hashmaps": ["hashmap", "dictionary", "map", "frequency"],
+        "Recursion": ["recursion", "recursive", "fibonacci"],
+        "Dynamic Programming": ["dynamic", "dp ", "knapsack", "subsequence"],
+        "Trees": ["tree", "bst", "binary search tree", "height"],
+        "Graphs": ["graph", "bfs", "dfs", "shortest path"],
+        "Math/Bit Manipulation": ["bit", "math", "power", "prime"],
+        "Stacks": ["stack", "balanced", "brackets"],
+        "Queues": ["queue", "deque"],
+    }
+
+    for topic, keywords in topic_keywords.items():
+        if any(kw in challenge_name for kw in keywords):
+            return topic
+
+    # Skip basic language tutorial challenges — not DSA
+    lang_basics = ["if-else", "loops", "stdin", "stdout", "output formatting",
+                   "welcome", "data types", "operators"]
+    if any(kw in challenge_name for kw in lang_basics):
+        return None
+
+    return "General Problem Solving"
 def _find_hackerrank_records(data) -> List[dict]:
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
@@ -2904,26 +2934,31 @@ def parse_hackerrank_json(json_content: str) -> dict:
     except json.JSONDecodeError as e:
         raise Exception(f"Invalid JSON format: {str(e)}")
 
-    challenges = _find_hackerrank_records(data)
+    # Handle HackerRank's user data export format (has a "submissions" key)
+    if isinstance(data, dict) and "submissions" in data:
+        submissions = data["submissions"]
+    else:
+        submissions = _find_hackerrank_records(data)
 
-    for challenge in challenges:
-        # Only count solved problems
-        if not _hackerrank_status_is_solved(challenge):
+    for record in submissions:
+        # In this export format, score > 0 means solved
+        score = record.get("score", 0)
+        if not score or float(score) <= 0:
             continue
 
-        # Parse subdomain/category as topic
-        subdomain = _hackerrank_topic_from_record(challenge)
+        subdomain = _hackerrank_topic_from_record(record)
         if not subdomain:
-            subdomain = _hackerrank_fallback_topic(challenge)
+            subdomain = _hackerrank_topic_from_submission(record)
+        if not subdomain:
+            subdomain = _hackerrank_fallback_topic(record)
         if subdomain:
             total_solved += 1
             _add_topic_count(topic_counts, difficulty_breakdown, subdomain, 1, "medium")
 
-    if challenges and total_solved == 0:
+    if submissions and total_solved == 0:
         raise Exception("No solved HackerRank DSA topics found in this file")
 
-    # Estimate weekly pace (default 5 problems/week if no data)
-    weekly_pace = 5 if total_solved == 0 else round(total_solved / 10, 2)
+    weekly_pace = round(total_solved / 10, 2) if total_solved > 0 else 5
 
     return {
         "source": "hackerrank",
