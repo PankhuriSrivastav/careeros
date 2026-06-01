@@ -38,6 +38,10 @@ export default function ReferralFinderPage() {
     router.push('/dashboard');
   };
 
+  const handleToInterviewIntel = () => {
+    router.push('/dashboard/interview-intel');
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
@@ -51,6 +55,12 @@ export default function ReferralFinderPage() {
             className="w-full flex items-center space-x-3 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
           >
             <span>← Back to Dashboard</span>
+          </button>
+          <button
+            onClick={handleToInterviewIntel}
+            className="w-full flex items-center space-x-3 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+          >
+            <span>🎤 Interview Intel</span>
           </button>
           <div className="border-t my-2"></div>
           <div className="px-4 py-2 text-sm font-semibold text-gray-700">Referral Finder</div>

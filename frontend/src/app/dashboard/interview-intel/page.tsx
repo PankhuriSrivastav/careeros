@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { startInterviewSession } from '@/lib/api';
 import { Send, Loader } from 'lucide-react';
 import Link from 'next/link';
+import InterviewIntelLayout from '@/components/interview-intel/InterviewIntelLayout';
 
 export default function InterviewIntelPage() {
   const router = useRouter();
@@ -52,7 +53,7 @@ export default function InterviewIntelPage() {
     }
   }
 
-  return (
+  const content = (
     <div className="space-y-6 max-w-4xl">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-8 rounded-lg shadow-lg">
@@ -221,5 +222,11 @@ export default function InterviewIntelPage() {
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <InterviewIntelLayout title="Interview Intel">
+      {content}
+    </InterviewIntelLayout>
   );
 }

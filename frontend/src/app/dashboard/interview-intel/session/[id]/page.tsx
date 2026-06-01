@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { getInterviewSession, sendInterviewMessage, completeInterviewSession } from '@/lib/api';
 import ChatWindow from '@/components/interview-intel/ChatWindow';
 import RoundProgressBar from '@/components/interview-intel/RoundProgressBar';
+import InterviewIntelLayout from '@/components/interview-intel/InterviewIntelLayout';
 import { Send, CheckCircle2 } from 'lucide-react';
 
 interface Round {
@@ -120,7 +121,7 @@ export default function InterviewSessionPage() {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
-  return (
+  const content = (
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-white p-6 rounded-lg shadow">
@@ -194,5 +195,11 @@ export default function InterviewSessionPage() {
         </div>
       )}
     </div>
+  );
+
+  return (
+    <InterviewIntelLayout title={`${session.company_name} - Interview`}>
+      {content}
+    </InterviewIntelLayout>
   );
 }

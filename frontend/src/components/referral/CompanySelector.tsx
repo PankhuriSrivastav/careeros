@@ -41,6 +41,7 @@ export default function CompanySelector({
     <div className="bg-white rounded-lg shadow sticky top-6">
       <div className="p-4 border-b">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Company</h2>
+        <p className="text-xs text-gray-500 mb-3">Companies from your careeros applications</p>
 
         {/* Search Bar */}
         <input
