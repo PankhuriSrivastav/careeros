@@ -187,7 +187,7 @@ class InterviewSessionTable(Base):
 class InterviewRoundTable(Base):
     __tablename__ = "interview_rounds"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    session_id = Column(UUID(as_uuid=True),ForeignKey("interview_sessions.id"), nullable=False, index=True)
     round_type = Column(String, nullable=False)  # dsa / technical / system_design / hr
     round_number = Column(Integer, nullable=False)  # 1/2/3/4
     interviewer_name = Column(String, nullable=False)
