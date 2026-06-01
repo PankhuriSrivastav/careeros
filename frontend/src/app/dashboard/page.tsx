@@ -26,7 +26,7 @@ export interface ResumeVersion {
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<
-    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel'
+    'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel' | 'interview-intel'
   >('applications');
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
@@ -100,6 +100,12 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
+  useEffect(() => {
+    if (activeTab === 'interview-intel') {
+      router.push('/dashboard/interview-intel');
+    }
+  }, [activeTab, router]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -126,6 +132,7 @@ export default function DashboardPage() {
             {activeTab === 'opportunities' && 'Opportunity Finder'}
             {activeTab === 'tailorkit' && 'TailorKit'}
             {activeTab === 'coding-intel' && 'Coding Round Intel'}
+            {activeTab === 'interview-intel' && 'Interview Intel'}
           </h1>
           <div className="flex items-center space-x-3">
             <a

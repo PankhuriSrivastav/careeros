@@ -2,12 +2,12 @@
 
 import {
   LayoutDashboard, FileText, Target, LogOut, BarChart3,
-  TrendingUp, Briefcase, Wand2, Zap
+  TrendingUp, Briefcase, Wand2, Zap, Mic
 } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel';
-  onTabChange: (tab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel') => void;
+  activeTab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel' | 'interview-intel';
+  onTabChange: (tab: 'applications' | 'resume' | 'match' | 'analytics' | 'skill-gap' | 'opportunities' | 'tailorkit' | 'coding-intel' | 'interview-intel') => void;
   onLogout: () => void;
 }
 
@@ -93,6 +93,16 @@ export default function Sidebar({ activeTab, onTabChange, onLogout }: SidebarPro
         >
           <Zap className="w-5 h-5" />
           <span>Coding Intel</span>
+        </button>
+        {/* 🆕 Interview Intel Tab */}
+        <button
+          onClick={() => onTabChange('interview-intel')}
+          className={`w-full flex items-center space-x-3 px-4 py-2 rounded-lg transition ${
+            activeTab === 'interview-intel' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Mic className="w-5 h-5" />
+          <span>Interview Intel</span>
         </button>
       </nav>
       <div className="p-4 border-t">

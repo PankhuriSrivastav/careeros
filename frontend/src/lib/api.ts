@@ -268,6 +268,50 @@ export const apiService = {
     const response = await api.get('/api/coding-intel/companies');
     return response.data;
   },
+
+  // Interview Intel
+  async startInterviewSession(companyName: string, jdText?: string, resumeSnapshot?: any, mode: string = 'full', selectedRounds?: string[]) {
+    const response = await api.post('/api/interview/session/start', {
+      company_name: companyName,
+      jd_text: jdText,
+      resume_snapshot: resumeSnapshot,
+      mode,
+      selected_rounds: selectedRounds,
+    });
+    return response.data;
+  },
+
+  async getInterviewSession(sessionId: string) {
+    const response = await api.get(`/api/interview/session/${sessionId}`);
+    return response.data;
+  },
+
+  async sendInterviewMessage(sessionId: string, content: string) {
+    const response = await api.post(`/api/interview/session/${sessionId}/message`, {
+      content,
+    });
+    return response.data;
+  },
+
+  async completeInterviewRound(sessionId: string) {
+    const response = await api.post(`/api/interview/session/${sessionId}/round/complete`, {});
+    return response.data;
+  },
+
+  async completeInterviewSession(sessionId: string) {
+    const response = await api.post(`/api/interview/session/${sessionId}/complete`, {});
+    return response.data;
+  },
+
+  async getInterviewSessions() {
+    const response = await api.get('/api/interview/sessions');
+    return response.data;
+  },
+
+  async getInterviewDebrief(sessionId: string) {
+    const response = await api.get(`/api/interview/session/${sessionId}/debrief`);
+    return response.data;
+  },
 };
 
 // Convenience exports for direct usage
@@ -287,6 +331,13 @@ export const searchProfessionals = apiService.searchProfessionals;
 export const draftMessage = apiService.draftMessage;
 export const trackReferral = apiService.trackReferral;
 export const updateReferralStatus = apiService.updateReferralStatus;
+export const startInterviewSession = apiService.startInterviewSession;
+export const getInterviewSession = apiService.getInterviewSession;
+export const sendInterviewMessage = apiService.sendInterviewMessage;
+export const completeInterviewRound = apiService.completeInterviewRound;
+export const completeInterviewSession = apiService.completeInterviewSession;
+export const getInterviewSessions = apiService.getInterviewSessions;
+export const getInterviewDebrief = apiService.getInterviewDebrief;
 export const getReferralHistory = apiService.getReferralHistory;
 export const parseLeetCodeCSV = apiService.parseLeetCodeCSV;
 export const parseHackerRankCSV = apiService.parseHackerRankCSV;
