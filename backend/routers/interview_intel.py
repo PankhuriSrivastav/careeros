@@ -59,6 +59,8 @@ async def start_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+import traceback
+
 @router.get("/session/{session_id}", response_model=InterviewSessionResponse)
 async def get_session(
     session_id: str,
@@ -78,7 +80,8 @@ async def get_session(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        traceback.print_exc()  # ← full error in server terminal
+        raise HTTPException(status_code=500, detail=str(e))  # ← real message to frontend
 
 
 @router.post("/session/{session_id}/message", response_model=MessageResponse)
@@ -102,6 +105,7 @@ async def send_message(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        traceback.print_exc()  # ← full error in server terminal
         raise HTTPException(status_code=500, detail=str(e))
 
 
