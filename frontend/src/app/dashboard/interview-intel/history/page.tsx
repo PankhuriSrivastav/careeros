@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getInterviewSessions } from '@/lib/api';
 import InterviewHistory from '@/components/interview-intel/InterviewHistory';
+import InterviewIntelLayout from '@/components/interview-intel/InterviewIntelLayout';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 
@@ -47,7 +48,7 @@ export default function InterviewHistoryPage() {
     );
   }
 
-  return (
+  const content = (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -74,5 +75,11 @@ export default function InterviewHistoryPage() {
       {/* History Content */}
       <InterviewHistory sessions={sessions} />
     </div>
+  );
+
+  return (
+    <InterviewIntelLayout title="Interview History">
+      {content}
+    </InterviewIntelLayout>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getInterviewDebrief } from '@/lib/api';
 import InterviewDebrief from '@/components/interview-intel/InterviewDebrief';
+import InterviewIntelLayout from '@/components/interview-intel/InterviewIntelLayout';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -51,19 +52,17 @@ export default function DebriefPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="bg-red-50 p-6 rounded-lg border border-red-200 text-center">
-        <p className="text-red-800 font-medium">{error}</p>
-        <Link href="/dashboard/interview-intel/history" className="text-red-600 hover:text-red-700 mt-3 inline-flex items-center space-x-2">
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to History</span>
-        </Link>
-      </div>
-    );
-  }
+  const errorContent = (
+    <div className="bg-red-50 p-6 rounded-lg border border-red-200 text-center">
+      <p className="text-red-800 font-medium">{error}</p>
+      <Link href="/dashboard/interview-intel/history" className="text-red-600 hover:text-red-700 mt-3 inline-flex items-center space-x-2">
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to History</span>
+      </Link>
+    </div>
+  );
 
-  return (
+  const content = (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -99,5 +98,11 @@ export default function DebriefPage() {
         </Link>
       </div>
     </div>
+  );
+
+  return (
+    <InterviewIntelLayout title="Interview Debrief">
+      {error ? errorContent : content}
+    </InterviewIntelLayout>
   );
 }
