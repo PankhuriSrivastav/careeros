@@ -9,11 +9,11 @@ from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query, Bo
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, Text, desc, Boolean, Integer
+from typing import List, Optional, Dict, Any
+from sqlalchemy import Column, String, DateTime, Text, desc, Boolean, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.sql import select, and_
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -25,6 +25,15 @@ from urllib.parse import quote_plus
 from opportunity_sources import gather_opportunity_listings
 import csv
 from datetime import datetime as dt
+
+# Interview Intel imports
+from services.interview_service import InterviewService
+from services.context_builder import ContextBuilder
+from schemas.interview_schemas import (
+    StartSessionRequest, MessageRequest, CompleteRoundRequest,
+    CompleteSessionRequest, InterviewSessionResponse, MessageResponse,
+    InterviewDebriefResponse, SessionsListResponse
+)
 
 load_dotenv()
 
@@ -44,11 +53,11 @@ if GEMINI_API_KEY:
     try:
         from google import genai
         genai_client = genai.Client(api_key=GEMINI_API_KEY)
-        print("✅ Gemini AI configured successfully")
+        print("[OK] Gemini AI configured successfully")
     except ImportError:
-        print("⚠️ google-genai not installed. Add to requirements.txt")
+        print("[WARNING] google-genai not installed. Add to requirements.txt")
     except Exception as e:
-        print(f"⚠️ Gemini setup failed: {e}")
+        print(f"[WARNING] Gemini setup failed: {e}")
 
 # ---------- Async SQLAlchemy ----------
 engine = create_async_engine(
@@ -161,6 +170,53 @@ class CodingProfileTable(Base):
     weekly_pace = Column(String, nullable=True)  # JSON: weekly solving pace in float
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class InterviewSessionTable(Base):
+    __tablename__ = "interview_sessions"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    company_name = Column(String, nullable=False)
+    jd_text = Column(Text, nullable=True)
+    resume_snapshot = Column(Text, nullable=True)  # JSON stored as text
+    mode = Column(String, nullable=False, default="full")  # full / single_round
+    status = Column(String, nullable=False, default="in_progress")  # in_progress / completed
+    overall_score = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    rounds = relationship("InterviewRoundTable", backref="session", cascade="all, delete-orphan")
+
+class InterviewRoundTable(Base):
+    __tablename__ = "interview_rounds"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    round_type = Column(String, nullable=False)  # dsa / technical / system_design / hr
+    round_number = Column(Integer, nullable=False)  # 1/2/3/4
+    interviewer_name = Column(String, nullable=False)
+    interviewer_persona = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="pending")  # pending / in_progress / completed
+    score = Column(Integer, nullable=True)
+    feedback = Column(Text, nullable=True)  # JSON stored as text
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+class InterviewMessageTable(Base):
+    __tablename__ = "interview_messages"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    round_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    role = Column(String, nullable=False)  # interviewer / user
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class InterviewDebriefTable(Base):
+    __tablename__ = "interview_debrief"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    overall_score = Column(Integer, nullable=False)
+    overall_feedback = Column(Text, nullable=True)  # JSON stored as text
+    round_breakdowns = Column(Text, nullable=True)  # JSON stored as text
+    strengths = Column(Text, nullable=True)  # JSON array stored as text
+    improvements = Column(Text, nullable=True)  # JSON array stored as text
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 # Tables managed by Alembic — no manual creation
 async def init_db():
@@ -3424,5 +3480,156 @@ async def get_companies(
             company_names.add(company.strip())
 
     return {"companies": sorted(company_names)}
+
+# ========== Interview Intel Routes ==========
+
+@app.post("/api/interview/session/start", response_model=InterviewSessionResponse)
+async def start_interview_session(
+    request: StartSessionRequest,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new interview session with 4 rounds"""
+    try:
+        service = InterviewService(db)
+        session = await service.create_session(
+            user_id=current_user["sub"],
+            company_name=request.company_name,
+            jd_text=request.jd_text,
+            resume_snapshot=request.resume_snapshot,
+            mode=request.mode,
+            selected_rounds=request.selected_rounds
+        )
+        return session
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/interview/session/{session_id}", response_model=InterviewSessionResponse)
+async def get_interview_session(
+    session_id: str,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get full session with current round status"""
+    try:
+        service = InterviewService(db)
+        session = await service.get_session(session_id)
+
+        if session["user_id"] != current_user["sub"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        return session
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/interview/session/{session_id}/message", response_model=MessageResponse)
+async def send_interview_message(
+    session_id: str,
+    request: MessageRequest,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Send a message in the current round and get interviewer response"""
+    try:
+        service = InterviewService(db)
+
+        session = await service.get_session(session_id)
+        if session["user_id"] != current_user["sub"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        response = await service.send_message(session_id, request.content)
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/interview/session/{session_id}/round/complete")
+async def complete_interview_round(
+    session_id: str,
+    request: CompleteRoundRequest,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Manually complete the current round and trigger score generation"""
+    try:
+        service = InterviewService(db)
+
+        session = await service.get_session(session_id)
+        if session["user_id"] != current_user["sub"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        current_round = session["current_round"]
+        if not current_round:
+            raise HTTPException(status_code=400, detail="No active round")
+
+        await service._complete_round(current_round["id"], session_id)
+        await db.commit()
+
+        return {"status": "success", "message": "Round completed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/interview/session/{session_id}/complete")
+async def complete_interview_session(
+    session_id: str,
+    request: CompleteSessionRequest,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark session as complete and trigger full debrief generation"""
+    try:
+        service = InterviewService(db)
+
+        session = await service.get_session(session_id)
+        if session["user_id"] != current_user["sub"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        debrief = await service.complete_session(session_id)
+        return debrief
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/interview/sessions", response_model=SessionsListResponse)
+async def get_interview_sessions(
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all past sessions for the user (for history page)"""
+    try:
+        service = InterviewService(db)
+        sessions = await service.get_user_sessions(current_user["sub"])
+        return {"sessions": sessions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/interview/session/{session_id}/debrief", response_model=InterviewDebriefResponse)
+async def get_interview_debrief(
+    session_id: str,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get full debrief report for a completed session"""
+    try:
+        service = InterviewService(db)
+
+        session = await service.get_session(session_id)
+        if session["user_id"] != current_user["sub"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        debrief = await service.get_debrief(session_id)
+        return debrief
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # uvicorn main:app --reload --port 8000
